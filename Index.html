@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#b5471d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Hamro Agan POS</title>
+    <style>
+      :root {
+        --bg: #faf7f2;
+        --card: #fff;
+        --tx: #2b2118;
+        --mut: #7a6d60;
+        --ac: #b5471d;
+        --bd: #e6ddd0;
+        --ok: #2f7d4f;
+        --bad: #b3261e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--tx);
+        font:
+          17px/1.4 system-ui,
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+        padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+      }
+      .wrap {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0;
+      }
+      h2 {
+        font-size: 1.1rem;
+        margin: 0 0 4px;
+      }
+      small {
+        display: block;
+        color: var(--mut);
+      }
+      .mut {
+        color: var(--mut);
+      }
+      button {
+        font: inherit;
+        min-height: 48px;
+        padding: 10px 16px;
+        border: 1px solid var(--bd);
+        background: var(--card);
+        color: var(--tx);
+        border-radius: 12px;
+        cursor: pointer;
+      }
+      button.p {
+        background: var(--ac);
+        color: #fff;
+        border-color: var(--ac);
+      }
+      button.g {
+        background: var(--ok);
+        color: #fff;
+        border-color: var(--ok);
+      }
+      button.x {
+        color: var(--bad);
+      }
+      button:disabled {
+        opacity: 0.5;
+      }
+      input {
+        font: inherit;
+        min-height: 48px;
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--bd);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--tx);
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--bd);
+        border-radius: 14px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .tabs button {
+        flex: 1;
+      }
+      .tabs .on {
+        background: var(--ac);
+        color: #fff;
+        border-color: var(--ac);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        margin: 10px 0;
+      }
+      .dish {
+        text-align: left;
+        min-height: 64px;
+      }
+      .cats {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        margin-top: 12px;
+      }
+      .cats button {
+        white-space: nowrap;
+        min-height: 40px;
+        padding: 6px 14px;
+        border-radius: 99px;
+      }
+      .cats .on {
+        background: var(--ac);
+        color: #fff;
+        border-color: var(--ac);
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--bd);
+      }
+      .big {
+        font-size: 1.3rem;
+      }
+      .pay {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .chip {
+        font-size: 0.8rem;
+        padding: 2px 8px;
+        border-radius: 99px;
+        border: 1px solid var(--bd);
+        white-space: nowrap;
+      }
+      .chip.paid {
+        color: var(--ok);
+        border-color: var(--ok);
+      }
+      .chip.open {
+        color: var(--ac);
+        border-color: var(--ac);
+      }
+      .note {
+        border: 1px dashed var(--ac);
+        border-radius: 10px;
+        padding: 10px;
+        margin: 8px 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media print {
+        .top,
+        .tabs,
+        .noprint,
+        #msg {
+          display: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="msg" class="note" hidden></div>
+
+      <section id="login" hidden>
+        <div class="card">
+          <h1>Hamro Agan Restaurant</h1>
+          <small>Log in to take orders</small>
+          <form id="lf">
+            <p>
+              <input
+                id="u"
+                placeholder="Name (for example staff1)"
+                autocapitalize="off"
+                autocomplete="username"
+              />
+            </p>
+            <p>
+              <input
+                id="pw"
+                type="password"
+                placeholder="Password"
+                autocomplete="current-password"
+              />
+            </p>
+            <button id="lb" class="p" style="width: 100%">Log in</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="main" hidden>
+        <div class="top">
+          <div>
+            <h1>Hamro Agan</h1>
+            <small id="who"></small>
+          </div>
+          <button id="out">Log out</button>
+        </div>
+        <div class="tabs">
+          <button id="tn">New order</button><button id="to">Orders</button
+          ><button id="tm" hidden>Menu</button>
+        </div>
+
+        <div id="vNew">
+          <div class="card">
+            <div id="editBar" class="note" hidden>
+              You are changing an open order. Change the dishes, then tap Save
+              changes.<br /><button id="ecancel" style="margin-top: 8px">
+                Stop changing
+              </button>
+            </div>
+            <input id="tbl" placeholder="Table number or name" />
+            <div id="cats" class="cats"></div>
+            <div id="noMenu" class="note" hidden>
+              The menu is empty. Ask the owner to add dishes.
+            </div>
+            <div id="dishes" class="grid"></div>
+            <div id="cart"></div>
+            <div class="row">
+              <b>Subtotal</b><b class="big" id="sub">Rs 0</b>
+            </div>
+            <p>
+              <button id="save" class="p" style="width: 100%">
+                Save order
+              </button>
+            </p>
+          </div>
+        </div>
+
+        <div id="vOrders" hidden>
+          <div class="card">
+            <h2>Today's orders</h2>
+            <div id="noOrders" class="note" hidden>No orders yet today.</div>
+            <div id="orderList"></div>
+          </div>
+        </div>
+
+        <div id="vBill" hidden><div class="card" id="billBox"></div></div>
+
+        <div id="vMenu" hidden>
+          <div class="card">
+            <h2>Add a dish</h2>
+            <p><input id="mn" placeholder="Dish name" /></p>
+            <p>
+              <input
+                id="mp"
+                type="number"
+                inputmode="decimal"
+                min="1"
+                placeholder="Price (Rs)"
+              />
+            </p>
+            <p>
+              <input
+                id="mc"
+                list="catlist"
+                placeholder="Category (for example Momo, Drinks)"
+              /><datalist id="catlist"></datalist>
+            </p>
+            <button id="madd" class="p" style="width: 100%">Add dish</button>
+            <small
+              >The category stays filled, so you can add many dishes of the same
+              category quickly.</small
+            >
+          </div>
+          <div class="card">
+            <h2>Menu</h2>
+            <div id="menuList"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script>
+      const URL_ = "https://qehpghjjisbpxgwtpaeo.supabase.co";
+      const KEY = "sb_publishable_7LJkU__LgkMBMSVpP93mqw_IueD2H2O";
+      const $ = (s) => document.querySelector(s);
+      const el = (t, c, x) => {
+        const e = document.createElement(t);
+        if (c) e.className = c;
+        if (x !== undefined) e.textContent = x;
+        return e;
+      };
+      const rs = (n) => "Rs " + Number(n || 0).toLocaleString("en-IN");
+      const tm = (s) =>
+        new Date(s).toLocaleTimeString("en-US", {
+          timeZone: "Asia/Kathmandu",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      let S = null;
+      try {
+        S = JSON.parse(localStorage.getItem("ha_s") || "null");
+      } catch (e) {}
+      let me = null,
+        menu = [],
+        orders = [],
+        cart = {},
+        billId = null,
+        view = "new",
+        poll = null,
+        cat = "",
+        editing = null,
+        snap = {};
+      const item = (id) => snap[id] || menu.find((x) => x.id === id);
+
+      function msg(t, bad) {
+        const m = $("#msg");
+        m.textContent = t;
+        m.hidden = !t;
+        m.style.color = bad ? "var(--bad)" : "var(--tx)";
+        clearTimeout(msg.t);
+        if (t)
+          msg.t = setTimeout(() => {
+            m.hidden = true;
+          }, 4500);
+      }
+
+      async function raw(path, opt = {}, tok) {
+        const h = {
+          apikey: KEY,
+          "Content-Type": "application/json",
+          ...(opt.headers || {}),
+        };
+        if (tok) h.Authorization = "Bearer " + tok;
+        const r = await fetch(URL_ + path, { ...opt, headers: h });
+        const t = await r.text();
+        let j = null;
+        try {
+          j = t ? JSON.parse(t) : null;
+        } catch (e) {}
+        if (!r.ok)
+          throw new Error(
+            (j && (j.message || j.error_description || j.msg || j.error)) ||
+              "Error " + r.status,
+          );
+        return j;
+      }
+      function saveSession(j) {
+        S = {
+          access: j.access_token,
+          refresh: j.refresh_token,
+          exp: Date.now() + (j.expires_in - 60) * 1000,
+          uid: j.user.id,
+        };
+        localStorage.setItem("ha_s", JSON.stringify(S));
+      }
+      async function login(u, p) {
+        const email = u.includes("@") ? u : u + "@hamroagan.com";
+        saveSession(
+          await raw("/auth/v1/token?grant_type=password", {
+            method: "POST",
+            body: JSON.stringify({ email, password: p }),
+          }),
+        );
+      }
+      async function token() {
+        if (!S) throw new Error("Please log in");
+        if (Date.now() > S.exp) {
+          try {
+            saveSession(
+              await raw("/auth/v1/token?grant_type=refresh_token", {
+                method: "POST",
+                body: JSON.stringify({ refresh_token: S.refresh }),
+              }),
+            );
+          } catch (e) {
+            logout();
+            throw new Error("Please log in again");
+          }
+        }
+        return S.access;
+      }
+      async function api(path, opt) {
+        return raw(path, opt, await token());
+      }
+      function logout() {
+        S = null;
+        me = null;
+        localStorage.removeItem("ha_s");
+        clearInterval(poll);
+        cart = {};
+        editing = null;
+        snap = {};
+        show("login");
+      }
+
+      function startOfToday() {
+        const off = 345 * 60000,
+          k = new Date(Date.now() + off);
+        return new Date(
+          Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - off,
+        ).toISOString();
+      }
+      async function loadMenu() {
+        const r = await api(
+          "/rest/v1/menu_items?select=*&active=eq.true&order=name",
+        );
+        menu = r.map((m) => ({ ...m, category: m.category || "Other" }));
+        drawDishes();
+        drawMenuList();
+      }
+      const cats = () =>
+        [...new Set(menu.map((m) => m.category))].sort((a, b) =>
+          a.localeCompare(b),
+        );
+      async function loadOrders() {
+        orders = await api(
+          "/rest/v1/orders?select=*&created_at=gte." +
+            encodeURIComponent(startOfToday()) +
+            "&order=created_at.desc",
+        );
+      }
+
+      function show(w) {
+        $("#login").hidden = w !== "login";
+        $("#main").hidden = w !== "main";
+      }
+      function go(v) {
+        view = v;
+        $("#vNew").hidden = v !== "new";
+        $("#vOrders").hidden = v !== "orders";
+        $("#vBill").hidden = v !== "bill";
+        $("#vMenu").hidden = v !== "menu";
+        $("#tn").classList.toggle("on", v === "new");
+        $("#to").classList.toggle("on", v === "orders");
+        $("#tm").classList.toggle("on", v === "menu");
+        if (v === "orders") drawOrders();
+        if (v === "bill") drawBill();
+        syncEdit();
+      }
+      function syncEdit() {
+        $("#editBar").hidden = !editing;
+        $("#save").textContent = editing ? "Save changes" : "Save order";
+      }
+      function startEdit(o) {
+        editing = o;
+        snap = {};
+        cart = {};
+        (o.items || []).forEach((i) => {
+          snap[i.id] = { id: i.id, name: i.name, price: i.price };
+          cart[i.id] = i.qty;
+        });
+        $("#tbl").value = o.table_name;
+        drawCart();
+        go("new");
+      }
+      function stopEdit() {
+        editing = null;
+        snap = {};
+        cart = {};
+        $("#tbl").value = "";
+        drawCart();
+        go(billId ? "bill" : "orders");
+      }
+
+      function drawDishes() {
+        const cs = cats();
+        if (cat !== "All" && !cs.includes(cat)) cat = cs[0] || "All";
+        const bar = $("#cats");
+        bar.replaceChildren();
+        if (cs.length > 1)
+          ["All", ...cs].forEach((c) => {
+            const b = el("button", c === cat ? "on" : "", c);
+            b.onclick = () => {
+              cat = c;
+              drawDishes();
+            };
+            bar.append(b);
+          });
+        const d = $("#dishes");
+        d.replaceChildren();
+        menu
+          .filter((m) => cat === "All" || m.category === cat)
+          .forEach((m) => {
+            const b = el("button", "dish", m.name);
+            b.append(el("small", "", rs(m.price)));
+            b.onclick = () => {
+              cart[m.id] = (cart[m.id] || 0) + 1;
+              drawCart();
+            };
+            d.append(b);
+          });
+        $("#noMenu").textContent =
+          me && me.role === "owner"
+            ? "The menu is empty. Tap Menu to add dishes."
+            : "The menu is empty. Ask the owner to add dishes.";
+        $("#noMenu").hidden = menu.length > 0;
+        drawCart();
+      }
+
+      function drawMenuList() {
+        const dl = $("#catlist");
+        dl.replaceChildren();
+        cats().forEach((c) => {
+          const o = el("option");
+          o.value = c;
+          dl.append(o);
+        });
+        const l = $("#menuList");
+        l.replaceChildren();
+        if (!menu.length) {
+          l.append(el("p", "mut", "No dishes yet."));
+          return;
+        }
+        let last = "";
+        [...menu]
+          .sort(
+            (a, b) =>
+              a.category.localeCompare(b.category) ||
+              a.name.localeCompare(b.name),
+          )
+          .forEach((m) => {
+            if (m.category !== last) {
+              last = m.category;
+              const h = el("b", "", m.category);
+              h.style.display = "block";
+              h.style.marginTop = "12px";
+              l.append(h);
+            }
+            const r = el("div", "row");
+            r.append(el("span", "", m.name + " · " + rs(m.price)));
+            const s = el("span"),
+              e = el("button", "", "Edit"),
+              x = el("button", "x", "Remove");
+            e.onclick = () => editDish(m, r);
+            x.onclick = () => removeDish(m);
+            s.append(e, " ", x);
+            r.append(s);
+            l.append(r);
+          });
+      }
+      function editDish(m, r) {
+        r.replaceChildren();
+        r.style.display = "block";
+        const n = el("input"),
+          p = el("input"),
+          c = el("input");
+        n.value = m.name;
+        p.type = "number";
+        p.value = m.price;
+        c.value = m.category;
+        c.setAttribute("list", "catlist");
+        [n, p, c].forEach((i) => {
+          i.style.marginBottom = "8px";
+        });
+        const s = el("button", "p", "Save"),
+          k = el("button", "", "Cancel");
+        s.onclick = () =>
+          saveDish(m, n.value.trim(), Number(p.value), c.value.trim());
+        k.onclick = drawMenuList;
+        r.append(n, p, c, s, " ", k);
+      }
+      async function saveDish(m, name, price, category) {
+        if (!name || !(price > 0)) return msg("Enter a name and a price", 1);
+        try {
+          await api("/rest/v1/menu_items?id=eq." + m.id, {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({
+              name,
+              price,
+              category: category || "Other",
+            }),
+          });
+          await loadMenu();
+          msg("Saved");
+        } catch (e) {
+          msg("Could not save: " + e.message, 1);
+        }
+      }
+      async function removeDish(m) {
+        if (
+          !confirm(
+            "Remove " + m.name + " from the menu? Old bills stay the same.",
+          )
+        )
+          return;
+        try {
+          await api("/rest/v1/menu_items?id=eq." + m.id, {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ active: false }),
+          });
+          delete cart[m.id];
+          await loadMenu();
+          msg("Removed");
+        } catch (e) {
+          msg("Could not remove: " + e.message, 1);
+        }
+      }
+      $("#madd").onclick = async () => {
+        const name = $("#mn").value.trim(),
+          price = Number($("#mp").value),
+          category = $("#mc").value.trim() || "Other";
+        if (!name || !(price > 0))
+          return msg("Enter a dish name and a price", 1);
+        try {
+          await api("/rest/v1/menu_items", {
+            method: "POST",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ name, price, category }),
+          });
+          $("#mn").value = "";
+          $("#mp").value = "";
+          await loadMenu();
+          msg("Dish added");
+          $("#mn").focus();
+        } catch (e) {
+          msg("Could not add: " + e.message, 1);
+        }
+      };
+      function drawCart() {
+        const c = $("#cart");
+        c.replaceChildren();
+        let t = 0;
+        Object.entries(cart).forEach(([id, q]) => {
+          const m = item(id);
+          if (!m) return;
+          t += m.price * q;
+          const r = el("div", "row");
+          r.append(el("span", "", m.name + " × " + q));
+          const s = el("span"),
+            a = el("button", "", "−"),
+            b = el("button", "", "+");
+          a.onclick = () => {
+            if (--cart[id] <= 0) delete cart[id];
+            drawCart();
+          };
+          b.onclick = () => {
+            cart[id]++;
+            drawCart();
+          };
+          s.append(a, " ", b);
+          r.append(s);
+          c.append(r);
+        });
+        $("#sub").textContent = rs(t);
+      }
+
+      function drawOrders() {
+        const l = $("#orderList");
+        l.replaceChildren();
+        $("#noOrders").hidden = orders.length > 0;
+        orders.forEach((o) => {
+          const r = el("div", "row"),
+            a = el("div"),
+            side = el("div");
+          a.append(
+            el("b", "", "Table " + o.table_name + " · " + tm(o.created_at)),
+            el("small", "", rs(o.total)),
+          );
+          const st =
+            o.status === "paid"
+              ? "Paid " +
+                o.pay_method +
+                (o.pay_method === "credit" && !o.credit_settled
+                  ? " (owes)"
+                  : "")
+              : o.status === "open"
+                ? "Open"
+                : "Cancelled";
+          const b = el("button", "", o.status === "open" ? "Bill" : "View");
+          b.onclick = () => {
+            billId = o.id;
+            go("bill");
+          };
+          side.append(el("span", "chip " + o.status, st), " ", b);
+          r.append(a, side);
+          l.append(r);
+        });
+      }
+
+      function drawBill() {
+        const o = orders.find((x) => x.id === billId);
+        if (!o) {
+          go("orders");
+          return;
+        }
+        const b = $("#billBox");
+        b.replaceChildren();
+        b.append(
+          el("h2", "", "Table " + o.table_name),
+          el("small", "", "Bill #" + o.order_no + " · " + tm(o.created_at)),
+        );
+        (o.items || []).forEach((i) => {
+          const r = el("div", "row");
+          r.append(
+            el("span", "", i.name + " × " + i.qty),
+            el("span", "", rs(i.price * i.qty)),
+          );
+          b.append(r);
+        });
+        const sr = el("div", "row");
+        sr.append(
+          el("span", "mut", "Subtotal"),
+          el("span", "", rs(o.subtotal)),
+        );
+        b.append(sr);
+        const tot = el("b", "big", rs(o.total));
+        if (o.status === "open") {
+          const dr = el("div", "row"),
+            d = el("input");
+          dr.append(el("span", "", "Discount %"));
+          d.type = "number";
+          d.min = 0;
+          d.max = 100;
+          d.inputMode = "decimal";
+          d.value = o.discount_percent || 0;
+          d.style.width = "100px";
+          dr.append(d);
+          b.append(dr);
+          const calc = () => {
+            const p = Math.min(100, Math.max(0, Number(d.value) || 0)),
+              t = Math.round(o.subtotal * (100 - p)) / 100;
+            tot.textContent = rs(t);
+            return { p, t };
+          };
+          d.oninput = calc;
+          calc();
+          const tr = el("div", "row");
+          tr.append(el("b", "", "Total"), tot);
+          b.append(tr);
+          const nm = el("input");
+          nm.placeholder = "Customer name (only for credit)";
+          nm.style.marginTop = "10px";
+          nm.className = "noprint";
+          b.append(nm);
+          const pay = el("div", "pay noprint");
+          [
+            ["cash", "Cash", "g"],
+            ["qr", "QR", "g"],
+            ["credit", "Credit", ""],
+          ].forEach(([k, lab, c]) => {
+            const x = el("button", c, lab);
+            x.onclick = () => payNow(o, k, calc(), nm.value.trim());
+            pay.append(x);
+          });
+          b.append(pay);
+          const ed = el("button", "noprint", "Change dishes (add or remove)");
+          ed.style.cssText = "margin-top:10px;width:100%";
+          ed.onclick = () => startEdit(o);
+          b.append(ed);
+          const cx = el("button", "x noprint", "Cancel this order");
+          cx.style.marginTop = "10px";
+          cx.onclick = () => cancelOrder(o);
+          b.append(cx);
+        } else {
+          if (Number(o.discount_percent) > 0) {
+            const r = el("div", "row");
+            r.append(
+              el("span", "mut", "Discount"),
+              el("span", "", o.discount_percent + "%"),
+            );
+            b.append(r);
+          }
+          const tr = el("div", "row");
+          tr.append(el("b", "", "Total"), tot);
+          b.append(tr);
+          b.append(
+            el(
+              "p",
+              "",
+              o.status === "paid"
+                ? "Paid by " +
+                    o.pay_method +
+                    (o.customer_name ? " · " + o.customer_name : "") +
+                    (o.pay_method === "credit"
+                      ? o.credit_settled
+                        ? " · money received"
+                        : " · not paid yet"
+                      : "")
+                : "This order was cancelled",
+            ),
+          );
+        }
+        const nav = el("div", "pay noprint"),
+          bk = el("button", "", "Back"),
+          pr = el("button", "", "Print");
+        bk.onclick = () => go("orders");
+        pr.onclick = () => window.print();
+        nav.style.gridTemplateColumns = "1fr 1fr";
+        nav.append(bk, pr);
+        b.append(nav);
+      }
+
+      async function patchOpen(o, body) {
+        const r = await api(
+          "/rest/v1/orders?id=eq." + o.id + "&status=eq.open",
+          {
+            method: "PATCH",
+            headers: { Prefer: "return=representation" },
+            body: JSON.stringify(body),
+          },
+        );
+        if (!r || !r.length) throw new Error("This bill was already changed");
+        await loadOrders();
+      }
+      async function payNow(o, k, { p, t }, name) {
+        if (k === "credit" && !name)
+          return msg("Type the customer name for credit", 1);
+        if (
+          !confirm(
+            "Mark as paid by " +
+              k.toUpperCase() +
+              "? Rs " +
+              t +
+              ". A paid bill cannot be changed.",
+          )
+        )
+          return;
+        try {
+          await patchOpen(o, {
+            status: "paid",
+            pay_method: k,
+            discount_percent: p,
+            total: t,
+            customer_name: name || null,
+            paid_at: new Date().toISOString(),
+          });
+          msg("Paid");
+          go("bill");
+        } catch (e) {
+          msg("Could not save: " + e.message, 1);
+        }
+      }
+      async function cancelOrder(o) {
+        if (!confirm("Cancel this order?")) return;
+        try {
+          await patchOpen(o, { status: "cancelled" });
+          msg("Order cancelled");
+          go("orders");
+        } catch (e) {
+          msg("Could not cancel: " + e.message, 1);
+        }
+      }
+
+      $("#save").onclick = async () => {
+        const t = $("#tbl").value.trim();
+        const items = Object.entries(cart)
+          .map(([id, q]) => {
+            const m = item(id);
+            return m && { id, name: m.name, price: m.price, qty: q };
+          })
+          .filter(Boolean);
+        if (!t) return msg("Enter the table number", 1);
+        if (!items.length)
+          return msg(
+            editing
+              ? "The order has no dishes. Use Cancel this order in the bill instead."
+              : "Tap a dish to add it",
+            1,
+          );
+        const sub = items.reduce((s, i) => s + i.price * i.qty, 0),
+          btn = $("#save");
+        btn.disabled = true;
+        try {
+          if (editing) {
+            const tot =
+              Math.round(
+                sub * (100 - (Number(editing.discount_percent) || 0)),
+              ) / 100;
+            await patchOpen(editing, {
+              table_name: t,
+              items,
+              subtotal: sub,
+              total: tot,
+            });
+            msg("Order updated");
+            stopEdit();
+          } else {
+            await api("/rest/v1/orders", {
+              method: "POST",
+              headers: { Prefer: "return=minimal" },
+              body: JSON.stringify({
+                table_name: t,
+                items,
+                subtotal: sub,
+                total: sub,
+              }),
+            });
+            cart = {};
+            $("#tbl").value = "";
+            drawCart();
+            await loadOrders();
+            msg("Order saved");
+            go("orders");
+          }
+        } catch (e) {
+          msg("Could not save: " + e.message, 1);
+        }
+        btn.disabled = false;
+      };
+      $("#tn").onclick = () => go("new");
+      $("#ecancel").onclick = stopEdit;
+      $("#tm").onclick = () => go("menu");
+      $("#to").onclick = async () => {
+        try {
+          await loadOrders();
+        } catch (e) {}
+        go("orders");
+      };
+      $("#out").onclick = logout;
+      $("#lf").onsubmit = async (e) => {
+        e.preventDefault();
+        const b = $("#lb");
+        b.disabled = true;
+        try {
+          await login($("#u").value.trim(), $("#pw").value);
+          $("#pw").value = "";
+          await start();
+        } catch (er) {
+          msg("Login failed: " + er.message, 1);
+        }
+        b.disabled = false;
+      };
+
+      async function start() {
+        if (!S) {
+          show("login");
+          return;
+        }
+        try {
+          const p = await api(
+            "/rest/v1/profiles?select=name,role&id=eq." + S.uid,
+          );
+          me = p && p[0];
+          if (!me)
+            throw new Error("No role is set for this login. Ask the owner.");
+          $("#who").textContent = me.name + " · " + me.role;
+          $("#tm").hidden = me.role !== "owner";
+          show("main");
+          await Promise.all([loadMenu(), loadOrders()]);
+          go("new");
+          clearInterval(poll);
+          poll = setInterval(() => {
+            if (view === "orders")
+              loadOrders()
+                .then(drawOrders)
+                .catch(() => {});
+          }, 20000);
+        } catch (e) {
+          msg(e.message, 1);
+          show(S ? "login" : "login");
+        }
+      }
+      start();
+    </script>
+  </body>
+</html>
