@@ -46,6 +46,7 @@ input,select{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1p
 <section id="main" hidden>
  <div class="top"><div><h1>Hamro Agan</h1><small id="who"></small></div><button id="out">Log out</button></div>
  <div class="tabs"><button id="tn">New order</button><button id="to">Orders</button><button id="tt" hidden>Today</button><button id="te" hidden>Expenses</button><button id="tc" hidden>Credit</button><button id="tmo" hidden>Month</button><button id="tm" hidden>Menu</button></div>
+ <div id="qBar" class="note" hidden></div>
  <div id="dayBar" class="card" hidden><input id="dayIn" type="date"></div>
 
  <div id="vNew"><div class="card">
@@ -127,8 +128,12 @@ function msg(t,bad){const m=$('#msg');m.textContent=t;m.hidden=!t;m.style.color=
 async function raw(path,opt={},tok){
  const h={apikey:KEY,'Content-Type':'application/json',...(opt.headers||{})};
  if(tok)h.Authorization='Bearer '+tok;
- const r=await fetch(URL_+path,{...opt,headers:h});
- const t=await r.text();let j=null;try{j=t?JSON.parse(t):null}catch(e){}
+ const ac=new AbortController(),tmo=setTimeout(()=>ac.abort(),20000),neterr=()=>Object.assign(new Error('No internet'),{net:true});
+ let r,t;
+ try{r=await fetch(URL_+path,{...opt,headers:h,signal:ac.signal});t=await r.text()}
+ catch(e){netDown=true;syncBar();throw neterr()}
+ finally{clearTimeout(tmo)}
+ netDown=false;let j=null;try{j=t?JSON.parse(t):null}catch(e){}
  if(!r.ok)throw new Error((j&&(j.message||j.error_description||j.msg||j.error))||('Error '+r.status));
  return j}
 function saveSession(j){S={access:j.access_token,refresh:j.refresh_token,exp:Date.now()+(j.expires_in-60)*1000,uid:j.user.id};localStorage.setItem('ha_s',JSON.stringify(S))}
@@ -139,15 +144,39 @@ async function token(){
  if(!S)throw new Error('Please log in');
  if(Date.now()>S.exp){
   try{saveSession(await raw('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:S.refresh})}))}
-  catch(e){logout();throw new Error('Please log in again')}}
+  catch(e){if(e.net)throw e;logout();throw new Error('Please log in again')}}
  return S.access}
 async function api(path,opt){return raw(path,opt,await token())}
-function logout(){S=null;me=null;localStorage.removeItem('ha_s');clearInterval(poll);cart={};editing=null;snap={};show('login')}
+function logout(){S=null;me=null;localStorage.removeItem('ha_s');localStorage.removeItem('ha_draft');clearInterval(poll);cart={};editing=null;snap={};show('login')}
+
+let queue=[];try{queue=JSON.parse(localStorage.getItem('ha_q')||'[]')}catch(e){}
+let netDown=false,flushing=false;
+const saveQ=()=>{try{localStorage.setItem('ha_q',JSON.stringify(queue))}catch(e){}syncBar()};
+const pend=()=>queue.filter(q=>!orders.some(o=>o.id===q.order.id));
+const newId=()=>(self.crypto&&self.crypto.randomUUID)?self.crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)});
+const postOrder=p=>api('/rest/v1/orders?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(p)});
+const saveDraft=()=>{if(editing)return;try{localStorage.setItem('ha_draft',JSON.stringify({cart,tbl:$('#tbl').value,otype}))}catch(e){}};
+function restoreDraft(){try{const d=JSON.parse(localStorage.getItem('ha_draft')||'null');if(d&&!editing){cart=d.cart||{};otype=d.otype||'dine-in';$('#tbl').value=d.tbl||''}}catch(e){}}
+function syncBar(){const b=$('#qBar'),n=queue.length;b.hidden=!n&&!netDown;if(b.hidden)return;b.replaceChildren();
+ b.append(el('span','',(netDown?'No internet. ':'')+(n?n+(n>1?' orders are':' order is')+' waiting to send. ':'Orders will be kept on this phone. ')));
+ if(n){const s=el('button','','Send now');s.style.minHeight='36px';s.onclick=flushQueue;b.append(s)}}
+async function flushQueue(){
+ if(flushing||!queue.length||!S)return;flushing=true;
+ try{
+  for(const q of queue.slice()){
+   delete q.err;
+   try{await postOrder(q.order);queue=queue.filter(x=>x!==q);saveQ()}
+   catch(e){if(e.net)break;q.err=e.message;saveQ()}}
+  loadOrders().then(()=>{if(view==='orders')drawOrders()}).catch(()=>{});
+ }finally{flushing=false;syncBar()}}
 
 function startOfToday(){const off=345*60000,k=new Date(Date.now()+off);return new Date(Date.UTC(k.getUTCFullYear(),k.getUTCMonth(),k.getUTCDate())-off).toISOString()}
-async function loadMenu(){const r=await api('/rest/v1/menu_items?select=*&active=eq.true&order=name');menu=r.map(m=>({...m,category:m.category||'Other'}));drawDishes();drawMenuList()}
+async function loadMenu(){
+ let r;try{r=await api('/rest/v1/menu_items?select=*&active=eq.true&order=name');try{localStorage.setItem('ha_menu',JSON.stringify(r))}catch(e){}}
+ catch(e){if(!e.net)throw e;try{r=JSON.parse(localStorage.getItem('ha_menu')||'[]')}catch(e2){r=[]}}
+ menu=r.map(m=>({...m,category:m.category||'Other'}));drawDishes();drawMenuList()}
 const cats=()=>[...new Set(menu.map(m=>m.category))].sort((a,b)=>a.localeCompare(b));
-async function loadOrders(){orders=await api('/rest/v1/orders?select=*&created_at=gte.'+encodeURIComponent(startOfToday())+'&order=created_at.desc')}
+async function loadOrders(){try{orders=await api('/rest/v1/orders?select=*&created_at=gte.'+encodeURIComponent(startOfToday())+'&order=created_at.desc')}catch(e){if(!e.net)throw e}}
 
 function show(w){$('#login').hidden=w!=='login';$('#main').hidden=w!=='main'}
 const VIEWS={new:'#vNew',orders:'#vOrders',bill:'#vBill',menu:'#vMenu',today:'#vToday',exp:'#vExp',credit:'#vCredit',month:'#vMonth'};
@@ -205,9 +234,13 @@ function drawCart(){const c=$('#cart');c.replaceChildren();let t=0;
   const s=el('span'),a=el('button','','−'),b=el('button','','+');
   a.onclick=()=>{if(--cart[id]<=0)delete cart[id];drawCart()};b.onclick=()=>{cart[id]++;drawCart()};
   s.append(a,' ',b);r.append(s);c.append(r)});
- $('#sub').textContent=rs(t)}
+ $('#sub').textContent=rs(t);saveDraft()}
 
-function drawOrders(){const l=$('#orderList');l.replaceChildren();$('#noOrders').hidden=orders.length>0;
+function drawOrders(){const l=$('#orderList');l.replaceChildren();const pd=pend();$('#noOrders').hidden=orders.length>0||pd.length>0;
+ pd.forEach(q=>{const o=q.order,r=el('div','row'),a=el('div'),side=el('div');
+  a.append(el('b','','Table '+o.table_name+' · '+tm(o.created_at)),el('small','',rs(o.total)+' · '+(o.order_type||'dine-in')+(q.err?' · Could not send: '+q.err:'')));
+  const x=el('button','x','Remove');x.onclick=()=>{if(!confirm('Remove this order from the phone? It was never sent.'))return;queue=queue.filter(z=>z!==q);saveQ();drawOrders()};
+  side.append(el('span','chip open','Waiting to send'),' ',x);r.append(a,side);l.append(r)});
  orders.forEach(o=>{const r=el('div','row'),a=el('div'),side=el('div');
   a.append(el('b','','Table '+o.table_name+' · '+tm(o.created_at)),el('small','',rs(o.total)+' · '+(o.order_type||'dine-in')));
   const st=o.status==='paid'?'Paid '+o.pay_method+(o.pay_method==='credit'&&!o.credit_settled?' (owes)':''):o.status==='open'?'Open':'Cancelled';
@@ -360,12 +393,14 @@ $('#save').onclick=async()=>{
  try{
   if(editing){const tot=Math.round(sub*(100-(Number(editing.discount_percent)||0)))/100;
    await patchOpen(editing,{table_name:t,order_type:otype,items,subtotal:sub,total:tot});msg('Order updated');stopEdit()}
-  else{await api('/rest/v1/orders',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({table_name:t,order_type:otype,items,subtotal:sub,total:sub})});
-   cart={};otype='dine-in';$('#tbl').value='';drawCart();await loadOrders();msg('Order saved');go('orders')}}
+  else{const po={id:newId(),table_name:t,order_type:otype,items,subtotal:sub,total:sub,created_by:S.uid};
+   try{await postOrder(po);cart={};otype='dine-in';$('#tbl').value='';drawCart();await loadOrders();msg('Order saved');go('orders')}
+   catch(e){if(!e.net)throw e;po.created_at=new Date().toISOString();queue.push({order:po});saveQ();cart={};otype='dine-in';$('#tbl').value='';drawCart();msg('No internet. The order is saved on this phone and will be sent when the internet is back.');go('orders')}}}
  catch(e){msg('Could not save: '+e.message,1)}
  btn.disabled=false};
 $('#tn').onclick=()=>go('new');
-document.querySelectorAll('#seg button').forEach(b=>{b.onclick=()=>{otype=b.dataset.t;syncEdit()}});
+document.querySelectorAll('#seg button').forEach(b=>{b.onclick=()=>{otype=b.dataset.t;syncEdit();saveDraft()}});
+$('#tbl').oninput=saveDraft;
 $('#ecancel').onclick=stopEdit;
 $('#tm').onclick=()=>go('menu');
 $('#tt').onclick=()=>openDay('today');
@@ -385,15 +420,15 @@ $('#dlE').onclick=()=>{
  const rows=[['Date','Category','Amount','Note']];mExp.forEach(e=>rows.push([e.expense_date,e.category,e.amount,e.note||'']));
  if(rows.length<2)return msg('No expenses in this month',1);
  downloadFile('hamro-agan-expenses-'+mon+'.csv',csv(rows))};
+$('#dayIn').onchange=async e=>{if(!e.target.value)return;day=e.target.value;try{await loadDay()}catch(er){msg('Could not load: '+er.message,1)}drawToday();drawExp()};
 $('#eadd').onclick=async()=>{
  const amount=Number($('#ea').value),category=$('#ec').value,note=$('#en').value.trim();
  if(!(amount>0))return msg('Type the amount',1);
  try{await api('/rest/v1/expenses',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({expense_date:day,category,amount,note:note||null})});
   $('#ea').value='';$('#en').value='';await loadDay();drawToday();drawExp();msg('Expense added')}
  catch(e){msg('Could not add: '+e.message,1)}};
-$('#dayIn').onchange=async e=>{if(!e.target.value)return;day=e.target.value;try{await loadDay()}catch(er){msg('Could not load: '+er.message,1)}drawToday();drawExp()};
 $('#to').onclick=async()=>{try{await loadOrders()}catch(e){}go('orders')};
-$('#out').onclick=logout;
+$('#out').onclick=()=>{if(queue.length&&!confirm(queue.length+' order(s) are not sent yet. They stay on this phone and are sent after the next login. Log out anyway?'))return;logout()};
 $('#lf').onsubmit=async e=>{e.preventDefault();const b=$('#lb');b.disabled=true;
  try{await login($('#u').value.trim(),$('#pw').value);$('#pw').value='';await start()}
  catch(er){msg('Login failed: '+er.message,1)}
@@ -402,11 +437,16 @@ $('#lf').onsubmit=async e=>{e.preventDefault();const b=$('#lb');b.disabled=true;
 async function start(){
  if(!S){show('login');return}
  try{
-  const p=await api('/rest/v1/profiles?select=name,role&id=eq.'+S.uid);me=p&&p[0];
+  try{const p=await api('/rest/v1/profiles?select=name,role&id=eq.'+S.uid);me=p&&p[0];if(me)localStorage.setItem('ha_me',JSON.stringify({uid:S.uid,...me}))}
+  catch(e){if(!e.net)throw e;let c=null;try{c=JSON.parse(localStorage.getItem('ha_me')||'null')}catch(e2){}if(!c||c.uid!==S.uid)throw e;me=c}
   if(!me)throw new Error('No role is set for this login. Ask the owner.');
-  $('#who').textContent=me.name+' · '+me.role;$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
-  await Promise.all([loadMenu(),loadOrders()]);go('new');
+  restoreDraft();
+  $('#who').textContent=me.name+' · '+me.role+' · v5';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
+  await Promise.all([loadMenu(),loadOrders()]);go('new');flushQueue();
   clearInterval(poll);poll=setInterval(()=>{if(view==='orders')loadOrders().then(drawOrders).catch(()=>{});if(view==='today'||view==='exp')loadDay().then(()=>{drawToday();drawExp()}).catch(()=>{})},20000);
  }catch(e){msg(e.message,1);show(S?'login':'login')}}
 start();
+addEventListener('online',flushQueue);
+setInterval(()=>{if(!S)return;flushQueue();if(netDown)api('/rest/v1/profiles?select=id&limit=1').catch(()=>{});syncBar()},15000);
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script></body></html>
