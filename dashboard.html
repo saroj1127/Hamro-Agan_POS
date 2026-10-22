@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hamro Agan Dashboard</title>
+<style>
+:root{--bg:#faf7f2;--card:#fff;--tx:#2b2118;--mut:#7a6d60;--ac:#b5471d;--bd:#e6ddd0;--ok:#2f7d4f;--bad:#b3261e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:12px}
+h1{font-size:1.3rem;margin:0}h2{font-size:1.05rem;margin:0 0 8px}
+small{display:block;color:var(--mut)}.mut{color:var(--mut)}
+button{font:inherit;min-height:44px;padding:8px 14px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:12px;cursor:pointer}
+button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+input,select{font:inherit;min-height:44px;width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:10px;background:#fff;color:var(--tx)}
+label{display:block;font-size:.85rem;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px}
+.kpi b{display:block;font-size:1.3rem;margin-top:2px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+.charts .card{margin:0}
+.ch{position:relative;height:260px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd)}
+.note{border:1px dashed var(--ac);border-radius:10px;padding:10px;margin:8px 0}
+[hidden]{display:none!important}
+</style></head><body><div class="wrap">
+<div id="msg" class="note" hidden></div>
+
+<section id="login" hidden><div class="card" style="max-width:420px;margin:30px auto">
+ <h1>Dashboard</h1><small>Log in as the owner</small>
+ <form id="lf">
+  <p><input id="u" placeholder="Email" autocapitalize="off" autocomplete="username"></p>
+  <p><input id="pw" type="password" placeholder="Password" autocomplete="current-password"></p>
+  <button id="lb" class="p" style="width:100%">Log in</button>
+ </form></div></section>
+
+<section id="denied" hidden><div class="card"><h2>Owner only</h2><p>This page is only for the owner login.</p><button id="out2">Log out</button></div></section>
+
+<section id="main" hidden>
+ <div class="top"><div><h1>Hamro Agan · Dashboard</h1><small id="stat"></small></div>
+  <div><a href="./"><button>Back to POS</button></a> <button id="out">Log out</button></div></div>
+
+ <div class="card"><div class="filters">
+  <div><label>From</label><input type="date" id="fFrom"></div>
+  <div><label>To</label><input type="date" id="fTo"></div>
+  <div><label>Quick range</label><select id="fQuick"><option value="">Choose…</option><option value="0">Today</option><option value="1">Yesterday</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="m0">This month</option><option value="m1">Last month</option></select></div>
+  <div><label>Payment</label><select id="fPay"><option value="">All</option><option value="cash">Cash</option><option value="qr">QR</option><option value="credit">Credit</option></select></div>
+  <div><label>Order type</label><select id="fType"><option value="">All</option><option value="dine-in">Dine-in</option><option value="takeaway">Takeaway</option><option value="delivery">Delivery</option></select></div>
+  <div><label>Category</label><select id="fCat"></select></div>
+  <div><label>Dish</label><select id="fDish"></select></div>
+  <div><label>Weekday</label><select id="fDow"><option value="">All</option><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6">Sunday</option></select></div>
+  <div><label>From hour</label><select id="fH1"></select></div>
+  <div><label>To hour</label><select id="fH2"></select></div>
+  <div><label>Staff</label><select id="fStaff"></select></div>
+  <div><button id="fReset" style="width:100%">Reset filters</button></div>
+ </div>
+ <small style="margin-top:8px">Only paid bills are counted. Category and dish filters count only those dish lines, after the bill discount. Times are Nepal time.</small></div>
+
+ <div class="kpis" id="kpis"></div>
+ <small id="note" style="margin-bottom:12px"></small>
+
+ <div class="charts">
+  <div class="card"><h2>Sales by day</h2><div class="ch"><canvas id="cDay"></canvas></div></div>
+  <div class="card"><h2>Sales by hour of the day</h2><div class="ch"><canvas id="cHour"></canvas></div></div>
+  <div class="card"><h2>Average sales per day, by weekday</h2><div class="ch"><canvas id="cDow"></canvas></div></div>
+  <div class="card"><h2>Cash, QR and credit</h2><div class="ch"><canvas id="cPay"></canvas></div></div>
+  <div class="card"><h2>Dine-in, takeaway and delivery</h2><div class="ch"><canvas id="cType"></canvas></div></div>
+  <div class="card"><h2>Sales by category</h2><div class="ch"><canvas id="cCat"></canvas></div></div>
+  <div class="card"><h2>Sales by staff member</h2><div class="ch"><canvas id="cStaff"></canvas></div></div>
+  <div class="card"><h2>Expenses by type</h2><div class="ch"><canvas id="cExp"></canvas></div></div>
+  <div class="card"><h2>Sales and expenses by month</h2><div class="ch"><canvas id="cMon"></canvas></div></div>
+  <div class="card"><h2>Best selling dishes</h2><div id="tBest"></div></div>
+  <div class="card"><h2>Slowest dishes</h2><div id="tSlow"></div></div>
+ </div>
+</section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const URL_='https://qehpghjjisbpxgwtpaeo.supabase.co';
+const KEY='sb_publishable_7LJkU__LgkMBMSVpP93mqw_IueD2H2O';
+const $=s=>document.querySelector(s);
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e};
+const rs=n=>'Rs '+Number(n||0).toLocaleString('en-IN');
+const KOFF=345*60000;
+const todayKtm=()=>new Date(Date.now()+KOFF).toISOString().slice(0,10);
+let S=null;try{S=JSON.parse(localStorage.getItem('ha_s')||'null')}catch(e){}
+let me=null,orders=[],exp=[],names={},menuAll=[],charts={},data=null;
+const PAL=['#b5471d','#2f7d4f','#d99a2b','#4a6fa5','#8a5a9e','#6b7a8f','#c25b7b'];
+
+function msg(t,bad){const m=$('#msg');m.textContent=t;m.hidden=!t;m.style.color=bad?'var(--bad)':'var(--tx)';clearTimeout(msg.t);if(t)msg.t=setTimeout(()=>{m.hidden=true},5000)}
+async function raw(path,opt={},tok){
+ const h={apikey:KEY,'Content-Type':'application/json',...(opt.headers||{})};
+ if(tok)h.Authorization='Bearer '+tok;
+ const r=await fetch(URL_+path,{...opt,headers:h});
+ const t=await r.text();let j=null;try{j=t?JSON.parse(t):null}catch(e){}
+ if(!r.ok)throw new Error((j&&(j.message||j.error_description||j.msg||j.error))||('Error '+r.status));
+ return j}
+function saveSession(j){S={access:j.access_token,refresh:j.refresh_token,exp:Date.now()+(j.expires_in-60)*1000,uid:j.user.id};localStorage.setItem('ha_s',JSON.stringify(S))}
+async function login(u,p){
+ const email=u.includes('@')?u:u+'@hamroagan.com';
+ saveSession(await raw('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email,password:p})}))}
+async function token(){
+ if(!S)throw new Error('Please log in');
+ if(Date.now()>S.exp){
+  try{saveSession(await raw('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:S.refresh})}))}
+  catch(e){logout();throw new Error('Please log in again')}}
+ return S.access}
+async function api(path,opt){return raw(path,opt,await token())}
+function logout(){S=null;me=null;localStorage.removeItem('ha_s');show('login')}
+async function allRows(path){let out=[],off=0;for(;;){const r=await api(path+'&limit=1000&offset='+off);out=out.concat(r);if(r.length<1000)return out;off+=1000}}
+function show(w){['login','denied','main'].forEach(k=>{$('#'+k).hidden=k!==w})}
+
+/*COMPUTE*/
+const sumBy=(a,f)=>a.reduce((s,x)=>s+Number(f(x)),0);
+const addDays=(ymd,n)=>new Date(Date.parse(ymd+'T00:00:00Z')+n*864e5).toISOString().slice(0,10);
+const inH=(h,F)=>F.h1<=F.h2?(h>=F.h1&&h<=F.h2):(h>=F.h1||h<=F.h2);
+function compute(orders,exp,F,menuAll,names){
+ const os=orders.filter(o=>(!F.pay||o.pay_method===F.pay)&&(!F.type||(o.order_type||'dine-in')===F.type)&&(!F.staff||o.created_by===F.staff)&&(F.dow===''||o.w===Number(F.dow))&&inH(o.h,F));
+ const lines=[];
+ os.forEach(o=>{const f=1-(Number(o.discount_percent)||0)/100;(o.items||[]).forEach(i=>{const c=i.category||'Other';if(F.cat&&c!==F.cat)return;if(F.dish&&i.name!==F.dish)return;lines.push({o,c,n:i.name,q:Number(i.qty),v:i.qty*i.price*f})})});
+ const lineF=!!(F.cat||F.dish),otherF=!!(F.pay||F.type||F.staff||F.dow!==''||F.h1!==0||F.h2!==23);
+ const group=f=>{const m={};lines.forEach(l=>{const k=f(l);m[k]=(m[k]||0)+l.v});return m};
+ const sales=sumBy(lines,l=>l.v),bills=new Set(lines.map(l=>l.o)).size,expTotal=sumBy(exp,e=>e.amount);
+ const days=[];for(let d=F.from;d<=F.to&&days.length<800;d=addDays(d,1))days.push(d);
+ const dowSum=Array(7).fill(0),dowN=Array(7).fill(0);
+ lines.forEach(l=>{dowSum[l.o.w]+=l.v});
+ days.forEach(d=>{dowN[(new Date(Date.parse(d+'T00:00:00Z')).getUTCDay()+6)%7]++});
+ const dishes={};lines.forEach(l=>{const x=dishes[l.n]||(dishes[l.n]={q:0,v:0});x.q+=l.q;x.v+=l.v});
+ menuAll.forEach(m=>{if(F.dish&&m.name!==F.dish)return;if(F.cat&&m.category!==F.cat)return;if(!dishes[m.name])dishes[m.name]={q:0,v:0}});
+ const expBy={};exp.forEach(e=>{expBy[e.category]=(expBy[e.category]||0)+Number(e.amount)});
+ const mS=group(l=>l.o.d.slice(0,7)),mE={};exp.forEach(e=>{const k=e.expense_date.slice(0,7);mE[k]=(mE[k]||0)+Number(e.amount)});
+ return{sales,bills,items:sumBy(lines,l=>l.q),expTotal,
+  discounts:lineF?null:sumBy(os,o=>o.subtotal-o.total),
+  owed:lineF?null:sumBy(os.filter(o=>o.pay_method==='credit'&&!o.credit_settled),o=>o.total),
+  profit:(!lineF&&!otherF)?sales-expTotal:null,
+  days,byDay:group(l=>l.o.d),byHour:Array.from({length:24},(_,h)=>sumBy(lines.filter(l=>l.o.h===h),l=>l.v)),
+  dowAvg:dowSum.map((s,i)=>dowN[i]?s/dowN[i]:0),
+  pay:group(l=>l.o.pay_method||'other'),type:group(l=>l.o.order_type||'dine-in'),cat:group(l=>l.c),
+  staff:group(l=>names[l.o.created_by]||'Unknown'),expBy,
+  months:[...new Set([...Object.keys(mS),...Object.keys(mE)])].sort(),mS,mE,dishes}}
+/*END*/
+
+const F={from:addDays(todayKtm(),-29),to:todayKtm(),pay:'',type:'',cat:'',dish:'',dow:'',h1:0,h2:23,staff:''};
+
+function chart(id,type,labels,sets,extra){
+ if(typeof Chart==='undefined')return;
+ if(charts[id])charts[id].destroy();
+ const dn=type==='doughnut';
+ charts[id]=new Chart($('#'+id),{type,data:{labels,datasets:sets},options:{responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:dn||sets.length>1},tooltip:{callbacks:{label:c=>' '+rs(c.raw)}}},
+  ...(dn?{}:{scales:{y:{beginAtZero:true}}}),...(extra||{})}})}
+const sorted=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]);
+const hl=h=>(h%12||12)+(h<12?'am':'pm');
+function tbl(sel,rows){const t=$(sel);t.replaceChildren();
+ if(!rows.length){t.append(el('p','mut','No data for these filters.'));return}
+ rows.forEach(([n,x],i)=>{const r=el('div','row'),a=el('div');a.append(el('b','',(i+1)+'. '+n),el('small','',x.q+' sold'));r.append(a,el('span','',rs(x.v)));t.append(r)})}
+
+function render(){
+ const d=data,k=$('#kpis');k.replaceChildren();
+ [['Sales',rs(d.sales)],['Bills',d.bills],['Average per bill',rs(d.bills?d.sales/d.bills:0)],['Items sold',d.items],
+  ['Discounts given',d.discounts==null?'—':rs(d.discounts)],['Credit not received',d.owed==null?'—':rs(d.owed)],
+  ['Expenses (with salary)',rs(d.expTotal)],['Profit',d.profit==null?'—':rs(d.profit)]
+ ].forEach(([l,v])=>{const c=el('div','kpi'),s=el('small','',l);c.append(s,el('b','',v));k.append(c)});
+ $('#note').textContent=d.profit==null?'Profit shows only when no filter is on except the dates. Expenses are not split by dish, hour or staff.':'';
+ chart('cDay','bar',d.days.map(x=>x.slice(5)),[{label:'Sales',data:d.days.map(x=>Math.round(d.byDay[x]||0)),backgroundColor:PAL[0]}]);
+ chart('cHour','bar',d.byHour.map((_,h)=>hl(h)),[{label:'Sales',data:d.byHour.map(Math.round),backgroundColor:PAL[3]}]);
+ chart('cDow','bar',['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],[{label:'Average sales per day',data:d.dowAvg.map(Math.round),backgroundColor:PAL[2]}]);
+ chart('cPay','doughnut',Object.keys(d.pay),[{data:Object.values(d.pay).map(Math.round),backgroundColor:PAL}]);
+ chart('cType','doughnut',Object.keys(d.type),[{data:Object.values(d.type).map(Math.round),backgroundColor:PAL}]);
+ const cs=sorted(d.cat);
+ chart('cCat','bar',cs.map(x=>x[0]),[{label:'Sales',data:cs.map(x=>Math.round(x[1])),backgroundColor:PAL[1]}],{indexAxis:'y',scales:{x:{beginAtZero:true}}});
+ const st=sorted(d.staff);
+ chart('cStaff','bar',st.map(x=>x[0]),[{label:'Sales',data:st.map(x=>Math.round(x[1])),backgroundColor:PAL[4]}]);
+ const ex=sorted(d.expBy);
+ chart('cExp','bar',ex.map(x=>x[0]),[{label:'Expenses',data:ex.map(x=>Math.round(x[1])),backgroundColor:PAL[6]}]);
+ chart('cMon','bar',d.months,[{label:'Sales',data:d.months.map(m=>Math.round(d.mS[m]||0)),backgroundColor:PAL[0]},{label:'Expenses',data:d.months.map(m=>Math.round(d.mE[m]||0)),backgroundColor:PAL[5]}]);
+ const ds=Object.entries(d.dishes);
+ tbl('#tBest',ds.filter(x=>x[1].q>0).sort((a,b)=>b[1].q-a[1].q).slice(0,15));
+ tbl('#tSlow',ds.sort((a,b)=>a[1].q-b[1].q||a[0].localeCompare(b[0])).slice(0,15))}
+function apply(){data=compute(orders,exp,F,menuAll,names);render()}
+
+async function load(){
+ $('#stat').textContent='Loading…';
+ const a=new Date(Date.parse(F.from+'T00:00:00Z')-KOFF).toISOString(),b=new Date(Date.parse(F.to+'T00:00:00Z')+864e5-KOFF).toISOString(),q=encodeURIComponent;
+ [orders,exp]=await Promise.all([
+  allRows('/rest/v1/orders?select=id,created_at,order_type,pay_method,discount_percent,subtotal,total,items,credit_settled,created_by&status=eq.paid&created_at=gte.'+q(a)+'&created_at=lt.'+q(b)+'&order=created_at.asc,id.asc'),
+  allRows('/rest/v1/expenses?select=expense_date,category,amount&expense_date=gte.'+F.from+'&expense_date=lte.'+F.to+'&order=expense_date.asc,id.asc')]);
+ orders.forEach(o=>{const k=new Date(Date.parse(o.created_at)+KOFF);o.d=k.toISOString().slice(0,10);o.h=k.getUTCHours();o.w=(k.getUTCDay()+6)%7});
+ fillLists();apply();
+ $('#stat').textContent=orders.length+' paid bills loaded ('+F.from+' to '+F.to+')'}
+async function reload(){
+ if(F.from>F.to)[F.from,F.to]=[F.to,F.from];
+ $('#fFrom').value=F.from;$('#fTo').value=F.to;
+ try{await load()}catch(e){msg('Could not load: '+e.message,1)}}
+
+function fillSel(id,vals,all){const s=$('#'+id),cur=s.value;s.replaceChildren();
+ const o0=el('option','',all);o0.value='';s.append(o0);
+ vals.forEach(([v,t])=>{const o=el('option','',t);o.value=v;s.append(o)});
+ s.value=vals.some(x=>x[0]===cur)?cur:''}
+function fillLists(){
+ const cs=new Set(menuAll.map(m=>m.category)),ds=new Set(menuAll.map(m=>m.name)),st=new Set();
+ orders.forEach(o=>{(o.items||[]).forEach(i=>{cs.add(i.category||'Other');ds.add(i.name)});if(o.created_by)st.add(o.created_by)});
+ fillSel('fCat',[...cs].sort().map(x=>[x,x]),'All categories');
+ fillSel('fDish',[...ds].sort().map(x=>[x,x]),'All dishes');
+ fillSel('fStaff',[...st].map(id=>[id,names[id]||'Unknown']).sort((a,b)=>a[1].localeCompare(b[1])),'All staff');
+ F.cat=$('#fCat').value;F.dish=$('#fDish').value;F.staff=$('#fStaff').value}
+
+for(let h=0;h<24;h++){['fH1','fH2'].forEach(id=>{const o=el('option','',hl(h));o.value=h;$('#'+id).append(o)})}
+$('#fH1').value=0;$('#fH2').value=23;
+[['fPay','pay'],['fType','type'],['fCat','cat'],['fDish','dish'],['fDow','dow'],['fH1','h1'],['fH2','h2'],['fStaff','staff']].forEach(([id,k])=>{
+ $('#'+id).onchange=e=>{F[k]=(k==='h1'||k==='h2')?Number(e.target.value):e.target.value;apply()}});
+$('#fFrom').onchange=e=>{F.from=e.target.value||F.from;reload()};
+$('#fTo').onchange=e=>{F.to=e.target.value||F.to;reload()};
+$('#fQuick').onchange=e=>{const v=e.target.value,t=todayKtm();if(!v)return;
+ if(v==='m0'){F.from=t.slice(0,7)+'-01';F.to=t}
+ else if(v==='m1'){const l=addDays(t.slice(0,7)+'-01',-1);F.from=l.slice(0,7)+'-01';F.to=l}
+ else if(v==='1'){F.from=F.to=addDays(t,-1)}
+ else{const n=Number(v);F.from=addDays(t,n===0?0:-(n-1));F.to=t}
+ e.target.value='';reload()};
+$('#fReset').onclick=()=>{Object.assign(F,{pay:'',type:'',cat:'',dish:'',dow:'',h1:0,h2:23,staff:''});
+ ['fPay','fType','fCat','fDish','fDow','fStaff'].forEach(i=>{$('#'+i).value=''});$('#fH1').value=0;$('#fH2').value=23;apply()};
+$('#out').onclick=logout;$('#out2').onclick=logout;
+$('#lf').onsubmit=async e=>{e.preventDefault();const b=$('#lb');b.disabled=true;
+ try{await login($('#u').value.trim(),$('#pw').value);$('#pw').value='';await start()}
+ catch(er){msg('Login failed: '+er.message,1)}
+ b.disabled=false};
+
+async function start(){
+ if(!S){show('login');return}
+ try{
+  const p=await api('/rest/v1/profiles?select=id,name,role');
+  me=p.find(x=>x.id===S.uid);
+  if(!me||me.role!=='owner'){show('denied');return}
+  p.forEach(x=>{names[x.id]=x.name});
+  menuAll=(await api('/rest/v1/menu_items?select=name,category&active=eq.true')).map(m=>({name:m.name,category:m.category||'Other'}));
+  show('main');await reload();
+ }catch(e){msg(e.message,1);show('login')}}
+start();
+</script></body></html>
