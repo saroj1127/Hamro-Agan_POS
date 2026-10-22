@@ -23,6 +23,7 @@ input,select{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1p
 .cats{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-top:12px}
 .cats button{white-space:nowrap;min-height:40px;padding:6px 14px;border-radius:99px}
 .cats .on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.seg{display:flex;gap:6px;margin:10px 0}.seg button{flex:1;min-height:44px;padding:8px}.seg .on{background:var(--ac);color:#fff;border-color:var(--ac)}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--bd)}
 .big{font-size:1.3rem}
 .pay{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
@@ -50,6 +51,7 @@ input,select{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1p
  <div id="vNew"><div class="card">
   <div id="editBar" class="note" hidden>You are changing an open order. Change the dishes, then tap Save changes.<br><button id="ecancel" style="margin-top:8px">Stop changing</button></div>
   <input id="tbl" placeholder="Table number or name">
+  <div id="seg" class="seg"><button data-t="dine-in">Dine-in</button><button data-t="takeaway">Takeaway</button><button data-t="delivery">Delivery</button></div>
   <div id="cats" class="cats"></div>
   <div id="noMenu" class="note" hidden>The menu is empty. Ask the owner to add dishes.</div>
   <div id="dishes" class="grid"></div>
@@ -97,7 +99,7 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==u
 const rs=n=>'Rs '+Number(n||0).toLocaleString('en-IN');
 const tm=s=>new Date(s).toLocaleTimeString('en-US',{timeZone:'Asia/Kathmandu',hour:'numeric',minute:'2-digit'});
 let S=null;try{S=JSON.parse(localStorage.getItem('ha_s')||'null')}catch(e){}
-let me=null,menu=[],orders=[],cart={},billId=null,view='new',poll=null,cat='',editing=null,snap={};
+let me=null,menu=[],orders=[],cart={},billId=null,view='new',poll=null,cat='',editing=null,snap={},otype='dine-in';
 const item=id=>snap[id]||menu.find(x=>x.id===id);
 const KOFF=345*60000;
 const todayKtm=()=>new Date(Date.now()+KOFF).toISOString().slice(0,10);
@@ -137,9 +139,9 @@ function go(v){view=v;$('#vNew').hidden=v!=='new';$('#vOrders').hidden=v!=='orde
  $('#dayBar').hidden=v!=='today'&&v!=='exp';
  $('#tn').classList.toggle('on',v==='new');$('#to').classList.toggle('on',v==='orders');$('#tm').classList.toggle('on',v==='menu');$('#tt').classList.toggle('on',v==='today');$('#te').classList.toggle('on',v==='exp');
  if(v==='orders')drawOrders();if(v==='bill')drawBill();syncEdit()}
-function syncEdit(){$('#editBar').hidden=!editing;$('#save').textContent=editing?'Save changes':'Save order'}
-function startEdit(o){editing=o;snap={};cart={};(o.items||[]).forEach(i=>{snap[i.id]={id:i.id,name:i.name,price:i.price};cart[i.id]=i.qty});$('#tbl').value=o.table_name;drawCart();go('new')}
-function stopEdit(){editing=null;snap={};cart={};$('#tbl').value='';drawCart();go(billId?'bill':'orders')}
+function syncEdit(){$('#editBar').hidden=!editing;$('#save').textContent=editing?'Save changes':'Save order';document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.t===otype))}
+function startEdit(o){editing=o;snap={};cart={};(o.items||[]).forEach(i=>{snap[i.id]={id:i.id,name:i.name,price:i.price,category:i.category};cart[i.id]=i.qty});otype=o.order_type||'dine-in';$('#tbl').value=o.table_name;drawCart();go('new')}
+function stopEdit(){editing=null;snap={};cart={};otype='dine-in';$('#tbl').value='';drawCart();go(billId?'bill':'orders')}
 
 function drawDishes(){
  const cs=cats();if(cat!=='All'&&!cs.includes(cat))cat=cs[0]||'All';
@@ -191,14 +193,14 @@ function drawCart(){const c=$('#cart');c.replaceChildren();let t=0;
 
 function drawOrders(){const l=$('#orderList');l.replaceChildren();$('#noOrders').hidden=orders.length>0;
  orders.forEach(o=>{const r=el('div','row'),a=el('div'),side=el('div');
-  a.append(el('b','','Table '+o.table_name+' · '+tm(o.created_at)),el('small','',rs(o.total)));
+  a.append(el('b','','Table '+o.table_name+' · '+tm(o.created_at)),el('small','',rs(o.total)+' · '+(o.order_type||'dine-in')));
   const st=o.status==='paid'?'Paid '+o.pay_method+(o.pay_method==='credit'&&!o.credit_settled?' (owes)':''):o.status==='open'?'Open':'Cancelled';
   const b=el('button','',o.status==='open'?'Bill':'View');b.onclick=()=>{billId=o.id;go('bill')};
   side.append(el('span','chip '+o.status,st),' ',b);r.append(a,side);l.append(r)})}
 
 function drawBill(){const o=orders.find(x=>x.id===billId);if(!o){go('orders');return}
  const b=$('#billBox');b.replaceChildren();
- b.append(el('h2','','Table '+o.table_name),el('small','','Bill #'+o.order_no+' · '+tm(o.created_at)));
+ b.append(el('h2','','Table '+o.table_name),el('small','','Bill #'+o.order_no+' · '+(o.order_type||'dine-in')+' · '+tm(o.created_at)));
  (o.items||[]).forEach(i=>{const r=el('div','row');r.append(el('span','',i.name+' × '+i.qty),el('span','',rs(i.price*i.qty)));b.append(r)});
  const sr=el('div','row');sr.append(el('span','mut','Subtotal'),el('span','',rs(o.subtotal)));b.append(sr);
  const tot=el('b','big',rs(o.total));
@@ -280,18 +282,19 @@ async function cancelOrder(o){
 
 $('#save').onclick=async()=>{
  const t=$('#tbl').value.trim();
- const items=Object.entries(cart).map(([id,q])=>{const m=item(id);return m&&{id,name:m.name,price:m.price,qty:q}}).filter(Boolean);
+ const items=Object.entries(cart).map(([id,q])=>{const m=item(id),mm=menu.find(x=>x.id===id);return m&&{id,name:m.name,price:m.price,qty:q,category:m.category||(mm&&mm.category)||'Other'}}).filter(Boolean);
  if(!t)return msg('Enter the table number',1);
  if(!items.length)return msg(editing?'The order has no dishes. Use Cancel this order in the bill instead.':'Tap a dish to add it',1);
  const sub=items.reduce((s,i)=>s+i.price*i.qty,0),btn=$('#save');btn.disabled=true;
  try{
   if(editing){const tot=Math.round(sub*(100-(Number(editing.discount_percent)||0)))/100;
-   await patchOpen(editing,{table_name:t,items,subtotal:sub,total:tot});msg('Order updated');stopEdit()}
-  else{await api('/rest/v1/orders',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({table_name:t,items,subtotal:sub,total:sub})});
-   cart={};$('#tbl').value='';drawCart();await loadOrders();msg('Order saved');go('orders')}}
+   await patchOpen(editing,{table_name:t,order_type:otype,items,subtotal:sub,total:tot});msg('Order updated');stopEdit()}
+  else{await api('/rest/v1/orders',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({table_name:t,order_type:otype,items,subtotal:sub,total:sub})});
+   cart={};otype='dine-in';$('#tbl').value='';drawCart();await loadOrders();msg('Order saved');go('orders')}}
  catch(e){msg('Could not save: '+e.message,1)}
  btn.disabled=false};
 $('#tn').onclick=()=>go('new');
+document.querySelectorAll('#seg button').forEach(b=>{b.onclick=()=>{otype=b.dataset.t;syncEdit()}});
 $('#ecancel').onclick=stopEdit;
 $('#tm').onclick=()=>go('menu');
 $('#tt').onclick=()=>openDay('today');
