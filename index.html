@@ -115,6 +115,7 @@ const tm=s=>new Date(s).toLocaleTimeString('en-US',{timeZone:'Asia/Kathmandu',ho
 let S=null;try{S=JSON.parse(localStorage.getItem('ha_s')||'null')}catch(e){}
 let me=null,menu=[],orders=[],cart={},billId=null,view='new',poll=null,cat='',editing=null,snap={},otype='dine-in';
 const item=id=>snap[id]||menu.find(x=>x.id===id);
+let names={};
 const KOFF=345*60000;
 const todayKtm=()=>new Date(Date.now()+KOFF).toISOString().slice(0,10);
 let day=todayKtm(),dOrders=[],dExp=[];
@@ -178,6 +179,9 @@ async function loadMenu(){
 const cats=()=>[...new Set(menu.map(m=>m.category))].sort((a,b)=>a.localeCompare(b));
 async function loadOrders(){try{orders=await api('/rest/v1/orders?select=*&created_at=gte.'+encodeURIComponent(startOfToday())+'&order=created_at.desc')}catch(e){if(!e.net)throw e}}
 
+async function loadNames(){
+ try{const p=await api('/rest/v1/profiles?select=id,name');const n={};p.forEach(x=>{n[x.id]=x.name});names=n;try{localStorage.setItem('ha_names',JSON.stringify(n))}catch(e){}}
+ catch(e){try{names=JSON.parse(localStorage.getItem('ha_names')||'{}')}catch(e2){names={}}}}
 function show(w){$('#login').hidden=w!=='login';$('#main').hidden=w!=='main'}
 const VIEWS={new:'#vNew',orders:'#vOrders',bill:'#vBill',menu:'#vMenu',today:'#vToday',exp:'#vExp',credit:'#vCredit',month:'#vMonth'};
 const TABS={new:'#tn',orders:'#to',menu:'#tm',today:'#tt',exp:'#te',credit:'#tc',month:'#tmo'};
@@ -238,11 +242,11 @@ function drawCart(){const c=$('#cart');c.replaceChildren();let t=0;
 
 function drawOrders(){const l=$('#orderList');l.replaceChildren();const pd=pend();$('#noOrders').hidden=orders.length>0||pd.length>0;
  pd.forEach(q=>{const o=q.order,r=el('div','row'),a=el('div'),side=el('div');
-  a.append(el('b','','Table '+o.table_name+' · '+tm(o.created_at)),el('small','',rs(o.total)+' · '+(o.order_type||'dine-in')+(q.err?' · Could not send: '+q.err:'')));
+  a.append(el('b','','Table '+o.table_name+' · '+tm(o.created_at)),el('small','',rs(o.total)+' · '+(o.order_type||'dine-in')+(names[o.created_by]?' · '+names[o.created_by]:'')+(q.err?' · Could not send: '+q.err:'')));
   const x=el('button','x','Remove');x.onclick=()=>{if(!confirm('Remove this order from the phone? It was never sent.'))return;queue=queue.filter(z=>z!==q);saveQ();drawOrders()};
   side.append(el('span','chip open','Waiting to send'),' ',x);r.append(a,side);l.append(r)});
  orders.forEach(o=>{const r=el('div','row'),a=el('div'),side=el('div');
-  a.append(el('b','','Table '+o.table_name+' · '+tm(o.created_at)),el('small','',rs(o.total)+' · '+(o.order_type||'dine-in')));
+  a.append(el('b','','Table '+o.table_name+' · '+tm(o.created_at)),el('small','',rs(o.total)+' · '+(o.order_type||'dine-in')+(names[o.created_by]?' · '+names[o.created_by]:'')));
   const st=o.status==='paid'?'Paid '+o.pay_method+(o.pay_method==='credit'&&!o.credit_settled?' (owes)':''):o.status==='open'?'Open':'Cancelled';
   const b=el('button','',o.status==='open'?'Bill':'View');b.onclick=()=>{billId=o.id;go('bill')};
   side.append(el('span','chip '+o.status,st),' ',b);r.append(a,side);l.append(r)})}
@@ -250,6 +254,7 @@ function drawOrders(){const l=$('#orderList');l.replaceChildren();const pd=pend(
 function drawBill(){const o=orders.find(x=>x.id===billId);if(!o){go('orders');return}
  const b=$('#billBox');b.replaceChildren();
  b.append(el('h2','','Table '+o.table_name),el('small','','Bill #'+o.order_no+' · '+(o.order_type||'dine-in')+' · '+tm(o.created_at)));
+ b.append(el('small','','Taken by '+(names[o.created_by]||'unknown')+(o.paid_by?' · Paid by '+(names[o.paid_by]||'unknown'):'')));
  (o.items||[]).forEach(i=>{const r=el('div','row');r.append(el('span','',i.name+' × '+i.qty),el('span','',rs(i.price*i.qty)));b.append(r)});
  const sr=el('div','row');sr.append(el('span','mut','Subtotal'),el('span','',rs(o.subtotal)));b.append(sr);
  const tot=el('b','big',rs(o.total));
@@ -341,7 +346,7 @@ async function loadMonth(){
  const [a,b]=mBounds(mon),q=encodeURIComponent,[y,m]=mon.split('-').map(Number);
  const d1=mon+'-01',d2=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10);
  [mOrders,mExp]=await Promise.all([
-  allRows('/rest/v1/orders?select=order_no,table_name,order_type,status,pay_method,customer_name,discount_percent,subtotal,total,items,credit_settled,created_at&created_at=gte.'+q(a)+'&created_at=lt.'+q(b)+'&order=created_at.asc,id.asc'),
+  allRows('/rest/v1/orders?select=order_no,table_name,order_type,status,pay_method,customer_name,discount_percent,subtotal,total,items,credit_settled,created_at,created_by,paid_by&created_at=gte.'+q(a)+'&created_at=lt.'+q(b)+'&order=created_at.asc,id.asc'),
   allRows('/rest/v1/expenses?select=*&expense_date=gte.'+d1+'&expense_date=lt.'+d2+'&order=expense_date.asc,created_at.asc,id.asc')])}
 async function openMonth(){go('month');$('#monIn').value=mon;try{await loadMonth()}catch(e){msg('Could not load: '+e.message,1)}drawMonth()}
 function drawMonth(){
@@ -377,7 +382,7 @@ async function patchOpen(o,body){
 async function payNow(o,k,{p,t},name){
  if(k==='credit'&&!name)return msg('Type the customer name for credit',1);
  if(!confirm('Mark as paid by '+k.toUpperCase()+'? Rs '+t+'. A paid bill cannot be changed.'))return;
- try{await patchOpen(o,{status:'paid',pay_method:k,discount_percent:p,total:t,customer_name:name||null,paid_at:new Date().toISOString()});msg('Paid');go('bill')}
+ try{await patchOpen(o,{status:'paid',pay_method:k,discount_percent:p,total:t,customer_name:name||null,paid_by:S.uid,paid_at:new Date().toISOString()});msg('Paid');go('bill')}
  catch(e){msg('Could not save: '+e.message,1)}}
 async function cancelOrder(o){
  if(!confirm('Cancel this order?'))return;
@@ -409,24 +414,24 @@ $('#tc').onclick=openCredit;
 $('#tmo').onclick=openMonth;
 $('#monIn').onchange=async e=>{if(!e.target.value)return;mon=e.target.value;try{await loadMonth()}catch(er){msg('Could not load: '+er.message,1)}drawMonth()};
 $('#dlS').onclick=()=>{
- const rows=[['Date','Time','Bill no','Table','Order type','Status','Payment','Customer','Credit received','Discount %','Category','Dish','Qty','Price','Line total','Bill subtotal','Bill total']];
+ const rows=[['Date','Time','Bill no','Table','Order type','Status','Payment','Customer','Credit received','Discount %','Category','Dish','Qty','Price','Line total','Bill subtotal','Bill total','Taken by','Paid by']];
  mOrders.forEach(o=>{const d=new Date(o.created_at);(o.items||[]).forEach(i=>rows.push([
   d.toLocaleDateString('en-CA',{timeZone:'Asia/Kathmandu'}),d.toLocaleTimeString('en-GB',{timeZone:'Asia/Kathmandu',hour:'2-digit',minute:'2-digit'}),
   o.order_no,o.table_name,o.order_type||'dine-in',o.status,o.pay_method||'',o.customer_name||'',o.pay_method==='credit'?(o.credit_settled?'yes':'no'):'',
-  o.discount_percent,i.category||'Other',i.name,i.qty,i.price,i.qty*i.price,o.subtotal,o.total]))});
+  o.discount_percent,i.category||'Other',i.name,i.qty,i.price,i.qty*i.price,o.subtotal,o.total,names[o.created_by]||'',names[o.paid_by]||'']))});
  if(rows.length<2)return msg('No sales in this month',1);
  downloadFile('hamro-agan-sales-'+mon+'.csv',csv(rows))};
 $('#dlE').onclick=()=>{
  const rows=[['Date','Category','Amount','Note']];mExp.forEach(e=>rows.push([e.expense_date,e.category,e.amount,e.note||'']));
  if(rows.length<2)return msg('No expenses in this month',1);
  downloadFile('hamro-agan-expenses-'+mon+'.csv',csv(rows))};
-$('#dayIn').onchange=async e=>{if(!e.target.value)return;day=e.target.value;try{await loadDay()}catch(er){msg('Could not load: '+er.message,1)}drawToday();drawExp()};
 $('#eadd').onclick=async()=>{
  const amount=Number($('#ea').value),category=$('#ec').value,note=$('#en').value.trim();
  if(!(amount>0))return msg('Type the amount',1);
  try{await api('/rest/v1/expenses',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({expense_date:day,category,amount,note:note||null})});
   $('#ea').value='';$('#en').value='';await loadDay();drawToday();drawExp();msg('Expense added')}
  catch(e){msg('Could not add: '+e.message,1)}};
+$('#dayIn').onchange=async e=>{if(!e.target.value)return;day=e.target.value;try{await loadDay()}catch(er){msg('Could not load: '+er.message,1)}drawToday();drawExp()};
 $('#to').onclick=async()=>{try{await loadOrders()}catch(e){}go('orders')};
 $('#out').onclick=()=>{if(queue.length&&!confirm(queue.length+' order(s) are not sent yet. They stay on this phone and are sent after the next login. Log out anyway?'))return;logout()};
 $('#lf').onsubmit=async e=>{e.preventDefault();const b=$('#lb');b.disabled=true;
@@ -441,8 +446,8 @@ async function start(){
   catch(e){if(!e.net)throw e;let c=null;try{c=JSON.parse(localStorage.getItem('ha_me')||'null')}catch(e2){}if(!c||c.uid!==S.uid)throw e;me=c}
   if(!me)throw new Error('No role is set for this login. Ask the owner.');
   restoreDraft();
-  $('#who').textContent=me.name+' · '+me.role+' · v5';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
-  await Promise.all([loadMenu(),loadOrders()]);go('new');flushQueue();
+  $('#who').textContent=me.name+' · '+me.role+' · v6';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
+  await Promise.all([loadMenu(),loadOrders(),loadNames()]);names[S.uid]=me.name;go('new');flushQueue();
   clearInterval(poll);poll=setInterval(()=>{if(view==='orders')loadOrders().then(drawOrders).catch(()=>{});if(view==='today'||view==='exp')loadDay().then(()=>{drawToday();drawExp()}).catch(()=>{})},20000);
  }catch(e){msg(e.message,1);show(S?'login':'login')}}
 start();
