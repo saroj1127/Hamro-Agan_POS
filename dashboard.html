@@ -46,7 +46,7 @@ label{display:block;font-size:.85rem;color:var(--mut)}
   <div><label>From</label><input type="date" id="fFrom"></div>
   <div><label>To</label><input type="date" id="fTo"></div>
   <div><label>Quick range</label><select id="fQuick"><option value="">Choose…</option><option value="0">Today</option><option value="1">Yesterday</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="m0">This month</option><option value="m1">Last month</option></select></div>
-  <div><label>Payment</label><select id="fPay"><option value="">All</option><option value="cash">Cash</option><option value="qr">QR</option><option value="credit">Credit</option></select></div>
+  <div><label>Bills with</label><select id="fPay"><option value="">All</option><option value="cash">Cash</option><option value="qr">QR</option><option value="credit">Credit</option></select></div>
   <div><label>Order type</label><select id="fType"><option value="">All</option><option value="dine-in">Dine-in</option><option value="takeaway">Takeaway</option><option value="delivery">Delivery</option></select></div>
   <div><label>Category</label><select id="fCat"></select></div>
   <div><label>Dish</label><select id="fDish"></select></div>
@@ -56,7 +56,7 @@ label{display:block;font-size:.85rem;color:var(--mut)}
   <div><label>Staff</label><select id="fStaff"></select></div>
   <div><button id="fReset" style="width:100%">Reset filters</button></div>
  </div>
- <small style="margin-top:8px">Only paid bills are counted. Category and dish filters count only those dish lines, after the bill discount. Times are Nepal time.</small></div>
+ <small style="margin-top:8px">Only paid bills are counted. "Bills with" shows the bills that have some cash, QR or credit in them. Category and dish filters count only those dish lines, after the bill discount. Times are Nepal time.</small></div>
 
  <div class="kpis" id="kpis"></div>
  <small id="note" style="margin-bottom:12px"></small>
@@ -65,7 +65,7 @@ label{display:block;font-size:.85rem;color:var(--mut)}
   <div class="card"><h2>Sales by day</h2><div class="ch"><canvas id="cDay"></canvas></div></div>
   <div class="card"><h2>Sales by hour of the day</h2><div class="ch"><canvas id="cHour"></canvas></div></div>
   <div class="card"><h2>Average sales per day, by weekday</h2><div class="ch"><canvas id="cDow"></canvas></div></div>
-  <div class="card"><h2>Cash, QR and credit</h2><div class="ch"><canvas id="cPay"></canvas></div></div>
+  <div class="card"><h2>Cash, QR and credit (cash is after change)</h2><div class="ch"><canvas id="cPay"></canvas></div></div>
   <div class="card"><h2>Dine-in, takeaway and delivery</h2><div class="ch"><canvas id="cType"></canvas></div></div>
   <div class="card"><h2>Sales by category</h2><div class="ch"><canvas id="cCat"></canvas></div></div>
   <div class="card"><h2>Sales by staff member</h2><div class="ch"><canvas id="cStaff"></canvas></div></div>
@@ -115,15 +115,18 @@ function show(w){['login','denied','main'].forEach(k=>{$('#'+k).hidden=k!==w})}
 /*COMPUTE*/
 const sumBy=(a,f)=>a.reduce((s,x)=>s+Number(f(x)),0);
 const addDays=(ymd,n)=>new Date(Date.parse(ymd+'T00:00:00Z')+n*864e5).toISOString().slice(0,10);
+const payHas=(o,m)=>m==='cash'?Number(o.cash_amount)>0:m==='qr'?Number(o.qr_amount)>0:Number(o.credit_amount)>0;
 const inH=(h,F)=>F.h1<=F.h2?(h>=F.h1&&h<=F.h2):(h>=F.h1||h<=F.h2);
 function compute(orders,exp,F,menuAll,names){
- const os=orders.filter(o=>(!F.pay||o.pay_method===F.pay)&&(!F.type||(o.order_type||'dine-in')===F.type)&&(!F.staff||o.created_by===F.staff)&&(F.dow===''||o.w===Number(F.dow))&&inH(o.h,F));
+ const os=orders.filter(o=>(!F.pay||payHas(o,F.pay))&&(!F.type||(o.order_type||'dine-in')===F.type)&&(!F.staff||o.created_by===F.staff)&&(F.dow===''||o.w===Number(F.dow))&&inH(o.h,F));
  const lines=[];
- os.forEach(o=>{const f=1-(Number(o.discount_percent)||0)/100;(o.items||[]).forEach(i=>{const c=i.category||'Other';if(F.cat&&c!==F.cat)return;if(F.dish&&i.name!==F.dish)return;lines.push({o,c,n:i.name,q:Number(i.qty),v:i.qty*i.price*f})})});
+ os.forEach(o=>{const f=Number(o.subtotal)>0?Number(o.total)/Number(o.subtotal):1;(o.items||[]).forEach(i=>{const c=i.category||'Other';if(F.cat&&c!==F.cat)return;if(F.dish&&i.name!==F.dish)return;lines.push({o,c,n:i.name,q:Number(i.qty),v:i.qty*i.price*f})})});
  const lineF=!!(F.cat||F.dish),otherF=!!(F.pay||F.type||F.staff||F.dow!==''||F.h1!==0||F.h2!==23);
  const group=f=>{const m={};lines.forEach(l=>{const k=f(l);m[k]=(m[k]||0)+l.v});return m};
  const sales=sumBy(lines,l=>l.v),bills=new Set(lines.map(l=>l.o)).size,expTotal=sumBy(exp,e=>e.amount);
  const days=[];for(let d=F.from;d<=F.to&&days.length<800;d=addDays(d,1))days.push(d);
+ const pay={cash:0,qr:0,credit:0};
+ lines.forEach(l=>{const t=Number(l.o.total)||0,sh=t>0?l.v/t:0;pay.cash+=sh*Number(l.o.cash_amount||0);pay.qr+=sh*Number(l.o.qr_amount||0);pay.credit+=sh*Number(l.o.credit_amount||0)});
  const dowSum=Array(7).fill(0),dowN=Array(7).fill(0);
  lines.forEach(l=>{dowSum[l.o.w]+=l.v});
  days.forEach(d=>{dowN[(new Date(Date.parse(d+'T00:00:00Z')).getUTCDay()+6)%7]++});
@@ -133,11 +136,11 @@ function compute(orders,exp,F,menuAll,names){
  const mS=group(l=>l.o.d.slice(0,7)),mE={};exp.forEach(e=>{const k=e.expense_date.slice(0,7);mE[k]=(mE[k]||0)+Number(e.amount)});
  return{sales,bills,items:sumBy(lines,l=>l.q),expTotal,
   discounts:lineF?null:sumBy(os,o=>o.subtotal-o.total),
-  owed:lineF?null:sumBy(os.filter(o=>o.pay_method==='credit'&&!o.credit_settled),o=>o.total),
+  owed:lineF?null:sumBy(os.filter(o=>!o.credit_settled),o=>Number(o.credit_amount||0)),
   profit:(!lineF&&!otherF)?sales-expTotal:null,
   days,byDay:group(l=>l.o.d),byHour:Array.from({length:24},(_,h)=>sumBy(lines.filter(l=>l.o.h===h),l=>l.v)),
   dowAvg:dowSum.map((s,i)=>dowN[i]?s/dowN[i]:0),
-  pay:group(l=>l.o.pay_method||'other'),type:group(l=>l.o.order_type||'dine-in'),cat:group(l=>l.c),
+  pay,type:group(l=>l.o.order_type||'dine-in'),cat:group(l=>l.c),
   staff:group(l=>names[l.o.created_by]||'Unknown'),expBy,
   months:[...new Set([...Object.keys(mS),...Object.keys(mE)])].sort(),mS,mE,dishes}}
 /*END*/
@@ -167,7 +170,7 @@ function render(){
  chart('cDay','bar',d.days.map(x=>x.slice(5)),[{label:'Sales',data:d.days.map(x=>Math.round(d.byDay[x]||0)),backgroundColor:PAL[0]}]);
  chart('cHour','bar',d.byHour.map((_,h)=>hl(h)),[{label:'Sales',data:d.byHour.map(Math.round),backgroundColor:PAL[3]}]);
  chart('cDow','bar',['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],[{label:'Average sales per day',data:d.dowAvg.map(Math.round),backgroundColor:PAL[2]}]);
- chart('cPay','doughnut',Object.keys(d.pay),[{data:Object.values(d.pay).map(Math.round),backgroundColor:PAL}]);
+ chart('cPay','bar',['Cash','QR','Credit'],[{label:'Amount',data:[d.pay.cash,d.pay.qr,d.pay.credit].map(Math.round),backgroundColor:[PAL[1],PAL[3],PAL[2]]}]);
  chart('cType','doughnut',Object.keys(d.type),[{data:Object.values(d.type).map(Math.round),backgroundColor:PAL}]);
  const cs=sorted(d.cat);
  chart('cCat','bar',cs.map(x=>x[0]),[{label:'Sales',data:cs.map(x=>Math.round(x[1])),backgroundColor:PAL[1]}],{indexAxis:'y',scales:{x:{beginAtZero:true}}});
@@ -185,7 +188,7 @@ async function load(){
  $('#stat').textContent='Loading…';
  const a=new Date(Date.parse(F.from+'T00:00:00Z')-KOFF).toISOString(),b=new Date(Date.parse(F.to+'T00:00:00Z')+864e5-KOFF).toISOString(),q=encodeURIComponent;
  [orders,exp]=await Promise.all([
-  allRows('/rest/v1/orders?select=id,created_at,order_type,pay_method,discount_percent,subtotal,total,items,credit_settled,created_by&status=eq.paid&created_at=gte.'+q(a)+'&created_at=lt.'+q(b)+'&order=created_at.asc,id.asc'),
+  allRows('/rest/v1/orders?select=id,created_at,order_type,pay_method,discount_percent,subtotal,total,items,credit_settled,created_by,cash_amount,qr_amount,credit_amount&status=eq.paid&created_at=gte.'+q(a)+'&created_at=lt.'+q(b)+'&order=created_at.asc,id.asc'),
   allRows('/rest/v1/expenses?select=expense_date,category,amount&expense_date=gte.'+F.from+'&expense_date=lte.'+F.to+'&order=expense_date.asc,id.asc')]);
  orders.forEach(o=>{const k=new Date(Date.parse(o.created_at)+KOFF);o.d=k.toISOString().slice(0,10);o.h=k.getUTCHours();o.w=(k.getUTCDay()+6)%7});
  fillLists();apply();
