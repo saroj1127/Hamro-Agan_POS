@@ -73,7 +73,7 @@ input,select{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1p
 
  <div id="vExp" hidden>
   <div class="card"><h2>Add an expense</h2>
-   <p><select id="ec"><option value="vegetables">Vegetables</option><option value="meat">Meat</option><option value="drinks">Drinks</option><option value="gas">Gas</option><option value="maintenance">Maintenance</option><option value="salary">Salary (monthly)</option></select></p>
+   <p><select id="ec"><option value="vegetables">Vegetables</option><option value="fruits">Fruits</option><option value="grocery">Grocery</option><option value="new items">New Items</option><option value="meat">Meat</option><option value="drinks">Drinks</option><option value="gas">Gas</option><option value="maintenance">Maintenance</option><option value="rent">Rent (monthly)</option><option value="salary">Salary (monthly)</option></select></p>
    <p><input id="ea" type="number" inputmode="decimal" min="1" placeholder="Amount (Rs)"></p>
    <p><input id="en" placeholder="Note (optional)"></p>
    <button id="eadd" class="p" style="width:100%">Add expense</button>
@@ -319,7 +319,7 @@ function drawToday(){
  const b=$('#todayBox');b.replaceChildren();
  const paid=dOrders.filter(o=>o.status==='paid'),open=dOrders.filter(o=>o.status==='open');
  const tot=a=>sumBy(a,o=>o.total),amt=f=>sumBy(paid,f);
- const sales=tot(paid),exp=sumBy(dExp.filter(e=>e.category!=='salary'),e=>e.amount),owed=sumBy(paid.filter(o=>!o.credit_settled),o=>o.credit_amount);
+ const sales=tot(paid),exp=sumBy(dExp.filter(e=>!['salary','rent'].includes(e.category))),e=>e.amount),owed=sumBy(paid.filter(o=>!o.credit_settled),o=>o.credit_amount);
  const row=(l,v,big,sub)=>{const r=el('div','row'),a=el('div');a.append(el('span',big?'':'mut',l));if(sub)a.append(el('small','',sub));r.append(a,big?el('b','big',v):el('span','',v));b.append(r)};
  b.append(el('h2','','Sales'));
  row('Total sales',rs(sales),1,paid.length+' paid bills');
@@ -390,7 +390,7 @@ function drawMonth(){
  addRow(b,'Credit',rs(amt(o=>o.credit_amount)),0,owed>0?rs(owed)+' not received yet':'');
  addRow(b,'Discounts given',rs(sumBy(paid,o=>o.subtotal-o.total)));
  const h=el('h2','','Expenses');h.style.marginTop='14px';b.append(h);
- ['vegetables','meat','drinks','gas','maintenance','salary'].forEach(c=>addRow(b,c[0].toUpperCase()+c.slice(1),rs(sumBy(mExp.filter(e=>e.category===c),e=>e.amount))));
+ [...new Set(['vegetables','fruits','grocery','new items','meat','drinks','gas','maintenance','rent','salary',...mExp.map(e=>e.category)])].forEach(c=>addRow(b,c[0].toUpperCase()+c.slice(1),rs(sumBy(mExp.filter(e=>e.category===c),e=>e.amount))));
  addRow(b,'Total expenses',rs(exp));
  addRow(b,'Profit (after salary)',rs(sales-exp),1);
  b.append(el('small','','Profit is sales minus all expenses, including salary. Credit sales count even if the money is not received yet.'));
