@@ -122,6 +122,9 @@ let day=todayKtm(),dOrders=[],dExp=[];
 let mon=todayKtm().slice(0,7),mOrders=[],mExp=[],credit=[];
 const dt=s=>new Date(s).toLocaleDateString('en-GB',{timeZone:'Asia/Kathmandu',day:'numeric',month:'short'});
 const sumBy=(a,f)=>a.reduce((s,x)=>s+Number(f(x)),0);
+const MONTHLY=['salary','rent'];
+const ECATS=()=>[...$('#ec').options].map(o=>o.value);
+const catLabel=v=>{const o=[...$('#ec').options].find(x=>x.value===v);return o?o.textContent.replace(/ \(monthly\)$/,''):v[0].toUpperCase()+v.slice(1)};
 const bounds=ymd=>{const [y,m,d]=ymd.split('-').map(Number),a=Date.UTC(y,m-1,d)-KOFF;return[new Date(a).toISOString(),new Date(a+864e5).toISOString()]};
 
 function msg(t,bad){const m=$('#msg');m.textContent=t;m.hidden=!t;m.style.color=bad?'var(--bad)':'var(--tx)';clearTimeout(msg.t);if(t)msg.t=setTimeout(()=>{m.hidden=true},4500)}
@@ -319,16 +322,16 @@ function drawToday(){
  const b=$('#todayBox');b.replaceChildren();
  const paid=dOrders.filter(o=>o.status==='paid'),open=dOrders.filter(o=>o.status==='open');
  const tot=a=>sumBy(a,o=>o.total),amt=f=>sumBy(paid,f);
- const sales=tot(paid),exp=sumBy(dExp.filter(e=>!['salary','rent'].includes(e.category))),e=>e.amount),owed=sumBy(paid.filter(o=>!o.credit_settled),o=>o.credit_amount);
+ const sales=tot(paid),exp=sumBy(dExp.filter(e=>!MONTHLY.includes(e.category)),e=>e.amount),owed=sumBy(paid.filter(o=>!o.credit_settled),o=>o.credit_amount);
  const row=(l,v,big,sub)=>{const r=el('div','row'),a=el('div');a.append(el('span',big?'':'mut',l));if(sub)a.append(el('small','',sub));r.append(a,big?el('b','big',v):el('span','',v));b.append(r)};
  b.append(el('h2','','Sales'));
  row('Total sales',rs(sales),1,paid.length+' paid bills');
  row('Cash',rs(amt(o=>o.cash_amount)),0,'After any change given back');row('QR',rs(amt(o=>o.qr_amount)));
  row('Credit',rs(amt(o=>o.credit_amount)),0,owed>0?rs(owed)+' not received yet':'');
  row('Open orders',rs(tot(open)),0,open.length+' not paid yet');
- row('Expenses (without salary)',rs(exp));
+ row('Expenses (without '+MONTHLY.join(' and ')+')',rs(exp));
  row('Profit',rs(sales-exp),1);
- b.append(el('small','','Profit is sales minus expenses. Salary is not in it. It counts in the monthly report. Credit sales are included even if the money is not received yet.'));
+ b.append(el('small','','Profit is sales minus expenses. Monthly items like salary and rent are not in it. They count in the monthly report. Credit sales are included even if the money is not received yet.'));
  const m={};paid.forEach(o=>(o.items||[]).forEach(i=>{const x=m[i.name]||(m[i.name]={q:0,a:0});x.q+=i.qty;x.a+=i.qty*i.price}));
  const l=$('#bestList');l.replaceChildren();
  const top=Object.entries(m).sort((x,y)=>y[1].q-x[1].q).slice(0,10);
@@ -339,7 +342,7 @@ function drawExp(){
  const l=$('#expList');l.replaceChildren();
  if(!dExp.length)l.append(el('p','mut','No expenses on this day.'));
  dExp.forEach(e=>{const r=el('div','row'),a=el('div');
-  a.append(el('b','',e.category[0].toUpperCase()+e.category.slice(1)),el('small','',e.note||''));
+  a.append(el('b','',catLabel(e.category)),el('small','',e.note||''));
   const s=el('span');s.append(el('span','',rs(e.amount)));
   if(me&&me.role==='owner'){const x=el('button','x','Delete');x.style.marginLeft='8px';x.onclick=()=>delExp(e);s.append(x)}
   r.append(a,s);l.append(r)});
@@ -390,10 +393,10 @@ function drawMonth(){
  addRow(b,'Credit',rs(amt(o=>o.credit_amount)),0,owed>0?rs(owed)+' not received yet':'');
  addRow(b,'Discounts given',rs(sumBy(paid,o=>o.subtotal-o.total)));
  const h=el('h2','','Expenses');h.style.marginTop='14px';b.append(h);
- [...new Set(['vegetables','fruits','grocery','new items','meat','drinks','gas','maintenance','rent','salary',...mExp.map(e=>e.category)])].forEach(c=>addRow(b,c[0].toUpperCase()+c.slice(1),rs(sumBy(mExp.filter(e=>e.category===c),e=>e.amount))));
+ [...new Set([...ECATS(),...mExp.map(e=>e.category)])].forEach(c=>addRow(b,catLabel(c),rs(sumBy(mExp.filter(e=>e.category===c),e=>e.amount))));
  addRow(b,'Total expenses',rs(exp));
- addRow(b,'Profit (after salary)',rs(sales-exp),1);
- b.append(el('small','','Profit is sales minus all expenses, including salary. Credit sales count even if the money is not received yet.'));
+ addRow(b,'Profit (after all expenses)',rs(sales-exp),1);
+ b.append(el('small','','Profit is sales minus all expenses, including salary and rent. Credit sales count even if the money is not received yet.'));
  const m={};paid.forEach(o=>(o.items||[]).forEach(i=>{const x=m[i.name]||(m[i.name]={q:0,a:0});x.q+=i.qty;x.a+=i.qty*i.price}));
  menu.forEach(d=>{if(!m[d.name])m[d.name]={q:0,a:0}});
  const arr=Object.entries(m);
@@ -461,13 +464,13 @@ $('#dlE').onclick=()=>{
  const rows=[['Date','Category','Amount','Note']];mExp.forEach(e=>rows.push([e.expense_date,e.category,e.amount,e.note||'']));
  if(rows.length<2)return msg('No expenses in this month',1);
  downloadFile('hamro-agan-expenses-'+mon+'.csv',csv(rows))};
+$('#dayIn').onchange=async e=>{if(!e.target.value)return;day=e.target.value;try{await loadDay()}catch(er){msg('Could not load: '+er.message,1)}drawToday();drawExp()};
 $('#eadd').onclick=async()=>{
  const amount=Number($('#ea').value),category=$('#ec').value,note=$('#en').value.trim();
  if(!(amount>0))return msg('Type the amount',1);
  try{await api('/rest/v1/expenses',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({expense_date:day,category,amount,note:note||null})});
   $('#ea').value='';$('#en').value='';await loadDay();drawToday();drawExp();msg('Expense added')}
  catch(e){msg('Could not add: '+e.message,1)}};
-$('#dayIn').onchange=async e=>{if(!e.target.value)return;day=e.target.value;try{await loadDay()}catch(er){msg('Could not load: '+er.message,1)}drawToday();drawExp()};
 $('#to').onclick=async()=>{try{await loadOrders()}catch(e){}go('orders')};
 $('#out').onclick=()=>{if(queue.length&&!confirm(queue.length+' order(s) are not sent yet. They stay on this phone and are sent after the next login. Log out anyway?'))return;logout()};
 $('#lf').onsubmit=async e=>{e.preventDefault();const b=$('#lb');b.disabled=true;
@@ -482,7 +485,7 @@ async function start(){
   catch(e){if(!e.net)throw e;let c=null;try{c=JSON.parse(localStorage.getItem('ha_me')||'null')}catch(e2){}if(!c||c.uid!==S.uid)throw e;me=c}
   if(!me)throw new Error('No role is set for this login. Ask the owner.');
   restoreDraft();
-  $('#who').textContent=me.name+' · '+me.role+' · v7';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
+  $('#who').textContent=me.name+' · '+me.role+' · v8';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
   await Promise.all([loadMenu(),loadOrders(),loadNames()]);names[S.uid]=me.name;go('new');flushQueue();
   clearInterval(poll);poll=setInterval(()=>{if(view==='orders')loadOrders().then(drawOrders).catch(()=>{});if(view==='today'||view==='exp')loadDay().then(()=>{drawToday();drawExp()}).catch(()=>{})},20000);
  }catch(e){msg(e.message,1);show(S?'login':'login')}}
