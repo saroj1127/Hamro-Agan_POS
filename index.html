@@ -101,6 +101,7 @@ input,select{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1p
    <p><input id="mc" list="catlist" placeholder="Category (for example Momo, Drinks)"><datalist id="catlist"></datalist></p>
    <button id="madd" class="p" style="width:100%">Add dish</button>
    <small>The category stays filled, so you can add many dishes of the same category quickly.</small></div>
+  <div class="card"><h2>Category order</h2><small>This is the order your staff see on the order screen. Use Top, ↑ or ↓.</small><div id="catOrder"></div></div>
   <div class="card"><h2>Menu</h2><div id="menuList"></div></div>
  </div>
 </section>
@@ -179,7 +180,29 @@ async function loadMenu(){
  let r;try{r=await api('/rest/v1/menu_items?select=*&active=eq.true&order=name');try{localStorage.setItem('ha_menu',JSON.stringify(r))}catch(e){}}
  catch(e){if(!e.net)throw e;try{r=JSON.parse(localStorage.getItem('ha_menu')||'[]')}catch(e2){r=[]}}
  menu=r.map(m=>({...m,category:m.category||'Other'}));drawDishes();drawMenuList()}
-const cats=()=>[...new Set(menu.map(m=>m.category))].sort((a,b)=>a.localeCompare(b));
+let catPos={};
+const cp=c=>c in catPos?catPos[c]:1e6;
+const cats=()=>[...new Set(menu.map(m=>m.category))].sort((a,b)=>cp(a)-cp(b)||a.localeCompare(b));
+async function loadCatOrder(){
+ try{const r=await api('/rest/v1/category_order?select=name,position');const m={};r.forEach(x=>{m[x.name]=x.position});catPos=m;try{localStorage.setItem('ha_catpos',JSON.stringify(m))}catch(e){}}
+ catch(e){try{catPos=JSON.parse(localStorage.getItem('ha_catpos')||'{}')}catch(e2){catPos={}}}}
+function drawCatOrder(){
+ const l=$('#catOrder');l.replaceChildren();const cs=cats();
+ if(cs.length<2){l.append(el('p','mut','Add dishes in at least two categories to set the order.'));return}
+ cs.forEach((c,i)=>{const r=el('div','row'),s=el('span'),top=el('button','','Top'),up=el('button','','↑'),dn=el('button','','↓');
+  [top,up,dn].forEach(b=>{b.style.minHeight='40px';b.style.padding='6px 12px'});
+  top.disabled=up.disabled=i===0;dn.disabled=i===cs.length-1;
+  top.onclick=()=>moveCat(c,'top');up.onclick=()=>moveCat(c,-1);dn.onclick=()=>moveCat(c,1);
+  s.append(top,' ',up,' ',dn);r.append(el('span','',(i+1)+'. '+c),s);l.append(r)})}
+async function moveCat(c,d){
+ const cs=cats(),i=cs.indexOf(c);if(i<0)return;
+ if(d==='top'){cs.splice(i,1);cs.unshift(c)}
+ else{const j=i+d;if(j<0||j>=cs.length)return;[cs[i],cs[j]]=[cs[j],cs[i]]}
+ const rows=cs.map((n,k)=>({name:n,position:k+1}));
+ try{await api('/rest/v1/category_order?on_conflict=name',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
+  const m={};rows.forEach(x=>{m[x.name]=x.position});catPos=m;try{localStorage.setItem('ha_catpos',JSON.stringify(m))}catch(e){}
+  cat=cs[0];drawDishes();drawMenuList();msg('Order saved')}
+ catch(e){msg('Could not save the order: '+e.message,1)}}
 async function loadOrders(){try{orders=await api('/rest/v1/orders?select=*&created_at=gte.'+encodeURIComponent(startOfToday())+'&order=created_at.desc')}catch(e){if(!e.net)throw e}}
 
 async function loadNames(){
@@ -205,7 +228,7 @@ function drawDishes(){
  $('#noMenu').textContent=me&&me.role==='owner'?'The menu is empty. Tap Menu to add dishes.':'The menu is empty. Ask the owner to add dishes.';
  $('#noMenu').hidden=menu.length>0;drawCart()}
 
-function drawMenuList(){
+function drawMenuList(){drawCatOrder();
  const dl=$('#catlist');dl.replaceChildren();cats().forEach(c=>{const o=el('option');o.value=c;dl.append(o)});
  const l=$('#menuList');l.replaceChildren();
  if(!menu.length){l.append(el('p','mut','No dishes yet.'));return}
@@ -485,8 +508,8 @@ async function start(){
   catch(e){if(!e.net)throw e;let c=null;try{c=JSON.parse(localStorage.getItem('ha_me')||'null')}catch(e2){}if(!c||c.uid!==S.uid)throw e;me=c}
   if(!me)throw new Error('No role is set for this login. Ask the owner.');
   restoreDraft();
-  $('#who').textContent=me.name+' · '+me.role+' · v8';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
-  await Promise.all([loadMenu(),loadOrders(),loadNames()]);names[S.uid]=me.name;go('new');flushQueue();
+  $('#who').textContent=me.name+' · '+me.role+' · v9';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
+  await Promise.all([loadMenu(),loadOrders(),loadNames(),loadCatOrder()]);names[S.uid]=me.name;cat='';drawDishes();drawMenuList();go('new');flushQueue();
   clearInterval(poll);poll=setInterval(()=>{if(view==='orders')loadOrders().then(drawOrders).catch(()=>{});if(view==='today'||view==='exp')loadDay().then(()=>{drawToday();drawExp()}).catch(()=>{})},20000);
  }catch(e){msg(e.message,1);show(S?'login':'login')}}
 start();
