@@ -115,6 +115,14 @@ const URL_='https://qehpghjjisbpxgwtpaeo.supabase.co';
 const KEY='sb_publishable_7LJkU__LgkMBMSVpP93mqw_IueD2H2O';
 const $=s=>document.querySelector(s);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e};
+ // Compatibility fix for older iPad Safari browsers
+if (!Element.prototype.replaceChildren) {
+  Element.prototype.replaceChildren = function () {
+    while (this.firstChild) {
+      this.removeChild(this.firstChild);
+    }
+  };
+}
 const rs=n=>'Rs '+Number(n||0).toLocaleString('en-IN');
 const tm=s=>new Date(s).toLocaleTimeString('en-US',{timeZone:'Asia/Kathmandu',hour:'numeric',minute:'2-digit'});
 let S=null;try{S=JSON.parse(localStorage.getItem('ha_s')||'null')}catch(e){}
