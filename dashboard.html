@@ -120,7 +120,7 @@ const inH=(h,F)=>F.h1<=F.h2?(h>=F.h1&&h<=F.h2):(h>=F.h1||h<=F.h2);
 function compute(orders,exp,F,menuAll,names){
  const os=orders.filter(o=>(!F.pay||payHas(o,F.pay))&&(!F.type||(o.order_type||'dine-in')===F.type)&&(!F.staff||o.created_by===F.staff)&&(F.dow===''||o.w===Number(F.dow))&&inH(o.h,F));
  const lines=[];
- os.forEach(o=>{const f=Number(o.subtotal)>0?Number(o.total)/Number(o.subtotal):1;(o.items||[]).forEach(i=>{const c=i.category||'Other';if(F.cat&&c!==F.cat)return;if(F.dish&&i.name!==F.dish)return;lines.push({o,c,n:i.name,q:Number(i.qty),v:i.qty*i.price*f})})});
+ os.forEach(o=>{const f=Number(o.subtotal)>0?Number(o.total)/Number(o.subtotal):1;(o.items||[]).forEach(i=>{const c=i.category||'Other';if(F.cat&&c!==F.cat)return;if(F.dish&&i.name!==F.dish)return;lines.push({o,c,n:i.name,q:Number(i.qty),h:i.portion==='half'?Number(i.qty):0,v:i.qty*i.price*f})})});
  const lineF=!!(F.cat||F.dish),otherF=!!(F.pay||F.type||F.staff||F.dow!==''||F.h1!==0||F.h2!==23);
  const group=f=>{const m={};lines.forEach(l=>{const k=f(l);m[k]=(m[k]||0)+l.v});return m};
  const sales=sumBy(lines,l=>l.v),bills=new Set(lines.map(l=>l.o)).size,expTotal=sumBy(exp,e=>e.amount);
@@ -130,8 +130,8 @@ function compute(orders,exp,F,menuAll,names){
  const dowSum=Array(7).fill(0),dowN=Array(7).fill(0);
  lines.forEach(l=>{dowSum[l.o.w]+=l.v});
  days.forEach(d=>{dowN[(new Date(Date.parse(d+'T00:00:00Z')).getUTCDay()+6)%7]++});
- const dishes={};lines.forEach(l=>{const x=dishes[l.n]||(dishes[l.n]={q:0,v:0});x.q+=l.q;x.v+=l.v});
- menuAll.forEach(m=>{if(F.dish&&m.name!==F.dish)return;if(F.cat&&m.category!==F.cat)return;if(!dishes[m.name])dishes[m.name]={q:0,v:0}});
+ const dishes={};lines.forEach(l=>{const x=dishes[l.n]||(dishes[l.n]={q:0,v:0,h:0});x.q+=l.q;x.v+=l.v;x.h+=l.h});
+ menuAll.forEach(m=>{if(F.dish&&m.name!==F.dish)return;if(F.cat&&m.category!==F.cat)return;if(!dishes[m.name])dishes[m.name]={q:0,v:0,h:0}});
  const expBy={};exp.forEach(e=>{expBy[e.category]=(expBy[e.category]||0)+Number(e.amount)});
  const mS=group(l=>l.o.d.slice(0,7)),mE={};exp.forEach(e=>{const k=e.expense_date.slice(0,7);mE[k]=(mE[k]||0)+Number(e.amount)});
  return{sales,bills,items:sumBy(lines,l=>l.q),expTotal,
@@ -158,7 +158,7 @@ const sorted=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]);
 const hl=h=>(h%12||12)+(h<12?'am':'pm');
 function tbl(sel,rows){const t=$(sel);t.replaceChildren();
  if(!rows.length){t.append(el('p','mut','No data for these filters.'));return}
- rows.forEach(([n,x],i)=>{const r=el('div','row'),a=el('div');a.append(el('b','',(i+1)+'. '+n),el('small','',x.q+' sold'));r.append(a,el('span','',rs(x.v)));t.append(r)})}
+ rows.forEach(([n,x],i)=>{const r=el('div','row'),a=el('div');a.append(el('b','',(i+1)+'. '+n),el('small','',x.q+' sold'+(x.h?' ('+(x.q-x.h)+' full, '+x.h+' half)':'')));r.append(a,el('span','',rs(x.v)));t.append(r)})}
 
 function render(){
  const d=data,k=$('#kpis');k.replaceChildren();
