@@ -20,12 +20,15 @@ input,select{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1p
 .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.tabs button{flex:1 1 auto;padding:10px 8px}.tabs .on{background:var(--ac);color:#fff;border-color:var(--ac)}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
 .dish{text-align:left;min-height:64px}
+.dcell{display:flex;flex-direction:column;gap:6px}.dcell .dish{flex:1}.dcell .half{min-height:40px;padding:6px 10px;text-align:left}
 .cats{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-top:12px}
 .cats button{white-space:nowrap;min-height:40px;padding:6px 14px;border-radius:99px}
 .cats .on{background:var(--ac);color:#fff;border-color:var(--ac)}
 .seg{display:flex;gap:6px;margin:10px 0}.seg button{flex:1;min-height:44px;padding:8px}.seg .on{background:var(--ac);color:#fff;border-color:var(--ac)}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--bd)}
 .big{font-size:1.3rem}
+.handle{width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:var(--mut);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.lift{background:var(--bg);box-shadow:0 4px 14px rgba(0,0,0,.2);border-radius:10px;position:relative;z-index:2}
 .pay{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .chip{font-size:.8rem;padding:2px 8px;border-radius:99px;border:1px solid var(--bd);white-space:nowrap}
 .chip.paid{color:var(--ok);border-color:var(--ok)}.chip.open{color:var(--ac);border-color:var(--ac)}
@@ -98,10 +101,11 @@ input,select{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1p
   <div class="card"><h2>Add a dish</h2>
    <p><input id="mn" placeholder="Dish name"></p>
    <p><input id="mp" type="number" inputmode="decimal" min="1" placeholder="Price (Rs)"></p>
+   <p><input id="mh" type="number" inputmode="decimal" min="1" placeholder="Half price (optional)"></p>
    <p><input id="mc" list="catlist" placeholder="Category (for example Momo, Drinks)"><datalist id="catlist"></datalist></p>
    <button id="madd" class="p" style="width:100%">Add dish</button>
    <small>The category stays filled, so you can add many dishes of the same category quickly.</small></div>
-  <div class="card"><h2>Category order</h2><small>This is the order your staff see on the order screen. Use Top, ↑ or ↓.</small><div id="catOrder"></div></div>
+  <div class="card"><h2>Category order</h2><small>This is the order your staff see on the order screen. Press and hold the ≡ sign on a row, then drag it up or down.</small><div id="catOrder"></div></div>
   <div class="card"><h2>Menu</h2><div id="menuList"></div></div>
  </div>
 </section>
@@ -115,7 +119,8 @@ const rs=n=>'Rs '+Number(n||0).toLocaleString('en-IN');
 const tm=s=>new Date(s).toLocaleTimeString('en-US',{timeZone:'Asia/Kathmandu',hour:'numeric',minute:'2-digit'});
 let S=null;try{S=JSON.parse(localStorage.getItem('ha_s')||'null')}catch(e){}
 let me=null,menu=[],orders=[],cart={},billId=null,view='new',poll=null,cat='',editing=null,snap={},otype='dine-in';
-const item=id=>snap[id]||menu.find(x=>x.id===id);
+const item=k=>{if(snap[k])return snap[k];const h=k.endsWith('#h'),m=menu.find(x=>x.id===(h?k.slice(0,-2):k));return m?(h?{...m,price:Number(m.half_price),portion:'half'}:m):null};
+const sold=x=>x.q+' sold'+(x.h?' ('+(x.q-x.h)+' full, '+x.h+' half)':'');
 let names={};
 const KOFF=345*60000;
 const todayKtm=()=>new Date(Date.now()+KOFF).toISOString().slice(0,10);
@@ -189,20 +194,32 @@ async function loadCatOrder(){
 function drawCatOrder(){
  const l=$('#catOrder');l.replaceChildren();const cs=cats();
  if(cs.length<2){l.append(el('p','mut','Add dishes in at least two categories to set the order.'));return}
- cs.forEach((c,i)=>{const r=el('div','row'),s=el('span'),top=el('button','','Top'),up=el('button','','↑'),dn=el('button','','↓');
-  [top,up,dn].forEach(b=>{b.style.minHeight='40px';b.style.padding='6px 12px'});
-  top.disabled=up.disabled=i===0;dn.disabled=i===cs.length-1;
-  top.onclick=()=>moveCat(c,'top');up.onclick=()=>moveCat(c,-1);dn.onclick=()=>moveCat(c,1);
-  s.append(top,' ',up,' ',dn);r.append(el('span','',(i+1)+'. '+c),s);l.append(r)})}
-async function moveCat(c,d){
- const cs=cats(),i=cs.indexOf(c);if(i<0)return;
- if(d==='top'){cs.splice(i,1);cs.unshift(c)}
- else{const j=i+d;if(j<0||j>=cs.length)return;[cs[i],cs[j]]=[cs[j],cs[i]]}
- const rows=cs.map((n,k)=>({name:n,position:k+1}));
+ cs.forEach((c,i)=>{const r=el('div','row'),h=el('span','handle','≡');
+  r.dataset.cat=c;r.style.justifyContent='flex-start';
+  h.addEventListener('pointerdown',e=>startDrag(e,r,l,h));
+  r.append(h,el('span','',(i+1)+'. '+c));l.append(r)})}
+function startDrag(e,row,list,h){
+ e.preventDefault();
+ if(h.setPointerCapture&&e.pointerId!==undefined)try{h.setPointerCapture(e.pointerId)}catch(x){}
+ const before0=cats().join('|');row.classList.add('lift');
+ const move=ev=>{
+  const y=ev.clientY;let next=null;
+  for(const r of [...list.children]){if(r===row)continue;const b=r.getBoundingClientRect();if(y<b.top+b.height/2){next=r;break}}
+  if(next){if(row.nextSibling!==next)list.insertBefore(row,next)}else if(list.lastChild!==row)list.append(row);
+  if(y<70)scrollBy(0,-14);else if(y>innerHeight-70)scrollBy(0,14)};
+ const end=()=>{
+  h.removeEventListener('pointermove',move);h.removeEventListener('pointerup',end);h.removeEventListener('pointercancel',end);
+  row.classList.remove('lift');
+  const order=[...list.children].map(x=>x.dataset.cat);
+  if(order.join('|')===before0){drawCatOrder();return}
+  saveCatOrder(order)};
+ h.addEventListener('pointermove',move);h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end)}
+async function saveCatOrder(order){
+ const rows=order.map((n,k)=>({name:n,position:k+1}));
  try{await api('/rest/v1/category_order?on_conflict=name',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
   const m={};rows.forEach(x=>{m[x.name]=x.position});catPos=m;try{localStorage.setItem('ha_catpos',JSON.stringify(m))}catch(e){}
-  cat=cs[0];drawDishes();drawMenuList();msg('Order saved')}
- catch(e){msg('Could not save the order: '+e.message,1)}}
+  drawDishes();drawMenuList();msg('Order saved')}
+ catch(e){msg('Could not save the order: '+e.message,1);drawCatOrder()}}
 async function loadOrders(){try{orders=await api('/rest/v1/orders?select=*&created_at=gte.'+encodeURIComponent(startOfToday())+'&order=created_at.desc')}catch(e){if(!e.net)throw e}}
 
 async function loadNames(){
@@ -215,7 +232,7 @@ function go(v){view=v;for(const k in VIEWS)$(VIEWS[k]).hidden=k!==v;for(const k 
  $('#dayBar').hidden=v!=='today'&&v!=='exp';
  if(v==='orders')drawOrders();if(v==='bill')drawBill();syncEdit()}
 function syncEdit(){$('#editBar').hidden=!editing;$('#save').textContent=editing?'Save changes':'Save order';document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.t===otype))}
-function startEdit(o){editing=o;snap={};cart={};(o.items||[]).forEach(i=>{snap[i.id]={id:i.id,name:i.name,price:i.price,category:i.category};cart[i.id]=i.qty});otype=o.order_type||'dine-in';$('#tbl').value=o.table_name;drawCart();go('new')}
+function startEdit(o){editing=o;snap={};cart={};(o.items||[]).forEach(i=>{const k=i.id+(i.portion==='half'?'#h':'');snap[k]={id:i.id,name:i.name,price:i.price,category:i.category,...(i.portion?{portion:i.portion}:{})};cart[k]=i.qty});otype=o.order_type||'dine-in';$('#tbl').value=o.table_name;drawCart();go('new')}
 function stopEdit(){editing=null;snap={};cart={};otype='dine-in';$('#tbl').value='';drawCart();go(billId?'bill':'orders')}
 
 function drawDishes(){
@@ -223,8 +240,10 @@ function drawDishes(){
  const bar=$('#cats');bar.replaceChildren();
  if(cs.length>1)['All',...cs].forEach(c=>{const b=el('button',c===cat?'on':'',c);b.onclick=()=>{cat=c;drawDishes()};bar.append(b)});
  const d=$('#dishes');d.replaceChildren();
- menu.filter(m=>cat==='All'||m.category===cat).forEach(m=>{const b=el('button','dish',m.name);b.append(el('small','',rs(m.price)));
-  b.onclick=()=>{cart[m.id]=(cart[m.id]||0)+1;drawCart()};d.append(b)});
+ menu.filter(m=>cat==='All'||m.category===cat).forEach(m=>{const w=el('div','dcell'),b=el('button','dish',m.name);b.append(el('small','',rs(m.price)));
+  b.onclick=()=>{cart[m.id]=(cart[m.id]||0)+1;drawCart()};w.append(b);
+  if(Number(m.half_price)>0){const h=el('button','half','Half · '+rs(m.half_price));h.onclick=()=>{const k=m.id+'#h';cart[k]=(cart[k]||0)+1;drawCart()};w.append(h)}
+  d.append(w)});
  $('#noMenu').textContent=me&&me.role==='owner'?'The menu is empty. Tap Menu to add dishes.':'The menu is empty. Ask the owner to add dishes.';
  $('#noMenu').hidden=menu.length>0;drawCart()}
 
@@ -235,32 +254,36 @@ function drawMenuList(){drawCatOrder();
  let last='';
  [...menu].sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name)).forEach(m=>{
   if(m.category!==last){last=m.category;const h=el('b','',m.category);h.style.display='block';h.style.marginTop='12px';l.append(h)}
-  const r=el('div','row');r.append(el('span','',m.name+' · '+rs(m.price)));
+  const r=el('div','row');r.append(el('span','',m.name+' · '+rs(m.price)+(Number(m.half_price)>0?' · Half '+rs(m.half_price):'')));
   const s=el('span'),e=el('button','','Edit'),x=el('button','x','Remove');
   e.onclick=()=>editDish(m,r);x.onclick=()=>removeDish(m);s.append(e,' ',x);r.append(s);l.append(r)})}
 function editDish(m,r){r.replaceChildren();r.style.display='block';
- const n=el('input'),p=el('input'),c=el('input');n.value=m.name;p.type='number';p.value=m.price;c.value=m.category;c.setAttribute('list','catlist');
- [n,p,c].forEach(i=>{i.style.marginBottom='8px'});
+ const n=el('input'),p=el('input'),hf=el('input'),c=el('input');n.value=m.name;p.type='number';p.value=m.price;
+ hf.type='number';hf.placeholder='Half price (optional)';hf.value=Number(m.half_price)>0?m.half_price:'';
+ c.value=m.category;c.setAttribute('list','catlist');
+ [n,p,hf,c].forEach(i=>{i.style.marginBottom='8px'});
  const s=el('button','p','Save'),k=el('button','','Cancel');
- s.onclick=()=>saveDish(m,n.value.trim(),Number(p.value),c.value.trim());k.onclick=drawMenuList;
- r.append(n,p,c,s,' ',k)}
-async function saveDish(m,name,price,category){
+ s.onclick=()=>saveDish(m,n.value.trim(),Number(p.value),c.value.trim(),hf.value.trim()===''?null:Number(hf.value));k.onclick=drawMenuList;
+ r.append(n,p,hf,c,s,' ',k)}
+async function saveDish(m,name,price,category,half){
  if(!name||!(price>0))return msg('Enter a name and a price',1);
- try{await api('/rest/v1/menu_items?id=eq.'+m.id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({name,price,category:category||'Other'})});await loadMenu();msg('Saved')}
+ if(half!==null&&!(half>0&&half<price))return msg('The half price must be more than 0 and less than the full price',1);
+ try{await api('/rest/v1/menu_items?id=eq.'+m.id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({name,price,half_price:half,category:category||'Other'})});await loadMenu();msg('Saved')}
  catch(e){msg('Could not save: '+e.message,1)}}
 async function removeDish(m){
  if(!confirm('Remove '+m.name+' from the menu? Old bills stay the same.'))return;
- try{await api('/rest/v1/menu_items?id=eq.'+m.id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({active:false})});delete cart[m.id];await loadMenu();msg('Removed')}
+ try{await api('/rest/v1/menu_items?id=eq.'+m.id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({active:false})});delete cart[m.id];delete cart[m.id+'#h'];await loadMenu();msg('Removed')}
  catch(e){msg('Could not remove: '+e.message,1)}}
 $('#madd').onclick=async()=>{
- const name=$('#mn').value.trim(),price=Number($('#mp').value),category=$('#mc').value.trim()||'Other';
+ const name=$('#mn').value.trim(),price=Number($('#mp').value),category=$('#mc').value.trim()||'Other',hs=$('#mh').value.trim(),half=hs===''?null:Number(hs);
  if(!name||!(price>0))return msg('Enter a dish name and a price',1);
- try{await api('/rest/v1/menu_items',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({name,price,category})});
-  $('#mn').value='';$('#mp').value='';await loadMenu();msg('Dish added');$('#mn').focus()}
+ if(half!==null&&!(half>0&&half<price))return msg('The half price must be more than 0 and less than the full price',1);
+ try{await api('/rest/v1/menu_items',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({name,price,half_price:half,category})});
+  $('#mn').value='';$('#mp').value='';$('#mh').value='';await loadMenu();msg('Dish added');$('#mn').focus()}
  catch(e){msg('Could not add: '+e.message,1)}};
 function drawCart(){const c=$('#cart');c.replaceChildren();let t=0;
  Object.entries(cart).forEach(([id,q])=>{const m=item(id);if(!m)return;t+=m.price*q;
-  const r=el('div','row');r.append(el('span','',m.name+' × '+q));
+  const r=el('div','row');r.append(el('span','',m.name+(m.portion==='half'?' (Half)':'')+' × '+q));
   const s=el('span'),a=el('button','','−'),b=el('button','','+');
   a.onclick=()=>{if(--cart[id]<=0)delete cart[id];drawCart()};b.onclick=()=>{cart[id]++;drawCart()};
   s.append(a,' ',b);r.append(s);c.append(r)});
@@ -287,7 +310,7 @@ function drawBill(){const o=orders.find(x=>x.id===billId);if(!o){go('orders');re
  const b=$('#billBox');b.replaceChildren();
  b.append(el('h2','','Table '+o.table_name),el('small','','Bill #'+o.order_no+' · '+(o.order_type||'dine-in')+' · '+tm(o.created_at)));
  b.append(el('small','','Taken by '+(names[o.created_by]||'unknown')+(o.paid_by?' · Paid by '+(names[o.paid_by]||'unknown'):'')));
- (o.items||[]).forEach(i=>{const r=el('div','row');r.append(el('span','',i.name+' × '+i.qty),el('span','',rs(i.price*i.qty)));b.append(r)});
+ (o.items||[]).forEach(i=>{const r=el('div','row');r.append(el('span','',i.name+(i.portion==='half'?' (Half)':'')+' × '+i.qty),el('span','',rs(i.price*i.qty)));b.append(r)});
  const sr=el('div','row');sr.append(el('span','mut','Subtotal'),el('span','',rs(o.subtotal)));b.append(sr);
  const tot=el('b','big',rs(o.total));
  if(o.status==='open'){
@@ -355,11 +378,11 @@ function drawToday(){
  row('Expenses (without '+MONTHLY.join(' and ')+')',rs(exp));
  row('Profit',rs(sales-exp),1);
  b.append(el('small','','Profit is sales minus expenses. Monthly items like salary and rent are not in it. They count in the monthly report. Credit sales are included even if the money is not received yet.'));
- const m={};paid.forEach(o=>(o.items||[]).forEach(i=>{const x=m[i.name]||(m[i.name]={q:0,a:0});x.q+=i.qty;x.a+=i.qty*i.price}));
+ const m={};paid.forEach(o=>(o.items||[]).forEach(i=>{const x=m[i.name]||(m[i.name]={q:0,a:0,h:0});x.q+=i.qty;x.a+=i.qty*i.price;if(i.portion==='half')x.h+=i.qty}));
  const l=$('#bestList');l.replaceChildren();
  const top=Object.entries(m).sort((x,y)=>y[1].q-x[1].q).slice(0,10);
  if(!top.length)l.append(el('p','mut','No paid bills on this day.'));
- top.forEach(([n,x],i)=>{const r=el('div','row'),a=el('div');a.append(el('b','',(i+1)+'. '+n),el('small','',x.q+' sold'));r.append(a,el('span','',rs(x.a)));l.append(r)})}
+ top.forEach(([n,x],i)=>{const r=el('div','row'),a=el('div');a.append(el('b','',(i+1)+'. '+n),el('small','',sold(x)));r.append(a,el('span','',rs(x.a)));l.append(r)})}
 
 function drawExp(){
  const l=$('#expList');l.replaceChildren();
@@ -420,11 +443,11 @@ function drawMonth(){
  addRow(b,'Total expenses',rs(exp));
  addRow(b,'Profit (after all expenses)',rs(sales-exp),1);
  b.append(el('small','','Profit is sales minus all expenses, including salary and rent. Credit sales count even if the money is not received yet.'));
- const m={};paid.forEach(o=>(o.items||[]).forEach(i=>{const x=m[i.name]||(m[i.name]={q:0,a:0});x.q+=i.qty;x.a+=i.qty*i.price}));
- menu.forEach(d=>{if(!m[d.name])m[d.name]={q:0,a:0}});
+ const m={};paid.forEach(o=>(o.items||[]).forEach(i=>{const x=m[i.name]||(m[i.name]={q:0,a:0,h:0});x.q+=i.qty;x.a+=i.qty*i.price;if(i.portion==='half')x.h+=i.qty}));
+ menu.forEach(d=>{if(!m[d.name])m[d.name]={q:0,a:0,h:0}});
  const arr=Object.entries(m);
  const list=(sel,a)=>{const l=$(sel);l.replaceChildren();if(!a.length)l.append(el('p','mut','No data yet.'));
-  a.forEach(([n,x],i)=>{const r=el('div','row'),d=el('div');d.append(el('b','',(i+1)+'. '+n),el('small','',x.q+' sold'));r.append(d,el('span','',rs(x.a)));l.append(r)})};
+  a.forEach(([n,x],i)=>{const r=el('div','row'),d=el('div');d.append(el('b','',(i+1)+'. '+n),el('small','',sold(x)));r.append(d,el('span','',rs(x.a)));l.append(r)})};
  list('#monBest',arr.slice().sort((x,y)=>y[1].q-x[1].q).filter(x=>x[1].q>0).slice(0,10));
  list('#monSlow',arr.slice().sort((x,y)=>x[1].q-y[1].q).slice(0,10))}
 
@@ -453,7 +476,7 @@ async function cancelOrder(o){
 
 $('#save').onclick=async()=>{
  const t=$('#tbl').value.trim();
- const items=Object.entries(cart).map(([id,q])=>{const m=item(id),mm=menu.find(x=>x.id===id);return m&&{id,name:m.name,price:m.price,qty:q,category:m.category||(mm&&mm.category)||'Other'}}).filter(Boolean);
+ const items=Object.entries(cart).map(([k,q])=>{const m=item(k),mm=menu.find(x=>x.id===(m&&m.id));return m&&{id:m.id,name:m.name,price:m.price,qty:q,category:m.category||(mm&&mm.category)||'Other',...(m.portion?{portion:m.portion}:{})}}).filter(Boolean);
  if(!t)return msg('Enter the table number',1);
  if(!items.length)return msg(editing?'The order has no dishes. Use Cancel this order in the bill instead.':'Tap a dish to add it',1);
  const sub=items.reduce((s,i)=>s+i.price*i.qty,0),btn=$('#save');btn.disabled=true;
@@ -476,11 +499,11 @@ $('#tc').onclick=openCredit;
 $('#tmo').onclick=openMonth;
 $('#monIn').onchange=async e=>{if(!e.target.value)return;mon=e.target.value;try{await loadMonth()}catch(er){msg('Could not load: '+er.message,1)}drawMonth()};
 $('#dlS').onclick=()=>{
- const rows=[['Date','Time','Bill no','Table','Order type','Status','Payment','Customer','Credit received','Discount %','Category','Dish','Qty','Price','Line total','Bill subtotal','Bill total','Cash','QR','Credit','Discount Rs','Taken by','Paid by']];
+ const rows=[['Date','Time','Bill no','Table','Order type','Status','Payment','Customer','Credit received','Discount %','Category','Dish','Portion','Qty','Price','Line total','Bill subtotal','Bill total','Cash','QR','Credit','Discount Rs','Taken by','Paid by']];
  mOrders.forEach(o=>{const d=new Date(o.created_at);(o.items||[]).forEach(i=>rows.push([
   d.toLocaleDateString('en-CA',{timeZone:'Asia/Kathmandu'}),d.toLocaleTimeString('en-GB',{timeZone:'Asia/Kathmandu',hour:'2-digit',minute:'2-digit'}),
   o.order_no,o.table_name,o.order_type||'dine-in',o.status,o.pay_method||'',o.customer_name||'',Number(o.credit_amount)>0?(o.credit_settled?'yes':'no'):'',
-  o.discount_percent,i.category||'Other',i.name,i.qty,i.price,i.qty*i.price,o.subtotal,o.total,o.cash_amount,o.qr_amount,o.credit_amount,o.discount_amount,names[o.created_by]||'',names[o.paid_by]||'']))});
+  o.discount_percent,i.category||'Other',i.name,i.portion==='half'?'half':'full',i.qty,i.price,i.qty*i.price,o.subtotal,o.total,o.cash_amount,o.qr_amount,o.credit_amount,o.discount_amount,names[o.created_by]||'',names[o.paid_by]||'']))});
  if(rows.length<2)return msg('No sales in this month',1);
  downloadFile('hamro-agan-sales-'+mon+'.csv',csv(rows))};
 $('#dlE').onclick=()=>{
@@ -508,7 +531,7 @@ async function start(){
   catch(e){if(!e.net)throw e;let c=null;try{c=JSON.parse(localStorage.getItem('ha_me')||'null')}catch(e2){}if(!c||c.uid!==S.uid)throw e;me=c}
   if(!me)throw new Error('No role is set for this login. Ask the owner.');
   restoreDraft();
-  $('#who').textContent=me.name+' · '+me.role+' · v9';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
+  $('#who').textContent=me.name+' · '+me.role+' · v11';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
   await Promise.all([loadMenu(),loadOrders(),loadNames(),loadCatOrder()]);names[S.uid]=me.name;cat='';drawDishes();drawMenuList();go('new');flushQueue();
   clearInterval(poll);poll=setInterval(()=>{if(view==='orders')loadOrders().then(drawOrders).catch(()=>{});if(view==='today'||view==='exp')loadDay().then(()=>{drawToday();drawExp()}).catch(()=>{})},20000);
  }catch(e){msg(e.message,1);show(S?'login':'login')}}
