@@ -20,7 +20,7 @@ input,select{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1p
 .tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.tabs button{flex:1 1 auto;padding:10px 8px}.tabs .on{background:var(--ac);color:#fff;border-color:var(--ac)}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}
 .dish{text-align:left;min-height:64px}
-.dcell{display:flex;flex-direction:column;gap:6px}.dcell .dish{flex:1}.dcell .half{min-height:40px;padding:6px 10px;text-align:left}
+button.half{border-color:var(--ac);color:var(--ac)}
 .cats{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-top:12px}
 .cats button{white-space:nowrap;min-height:40px;padding:6px 14px;border-radius:99px}
 .cats .on{background:var(--ac);color:#fff;border-color:var(--ac)}
@@ -241,17 +241,15 @@ function go(v){view=v;for(const k in VIEWS)$(VIEWS[k]).hidden=k!==v;for(const k 
  if(v==='orders')drawOrders();if(v==='bill')drawBill();syncEdit()}
 function syncEdit(){$('#editBar').hidden=!editing;$('#save').textContent=editing?'Save changes':'Save order';document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.t===otype))}
 function startEdit(o){editing=o;snap={};cart={};(o.items||[]).forEach(i=>{const k=i.id+(i.portion==='half'?'#h':'');snap[k]={id:i.id,name:i.name,price:i.price,category:i.category,...(i.portion?{portion:i.portion}:{})};cart[k]=i.qty});otype=o.order_type||'dine-in';$('#tbl').value=o.table_name;drawCart();go('new')}
-function stopEdit(){editing=null;snap={};cart={};otype='dine-in';$('#tbl').value='';drawCart();go(billId?'bill':'orders')}
+function stopEdit(){editing=null;snap={};snap={};cart={};otype='dine-in';$('#tbl').value='';drawCart();go(billId?'bill':'orders')}
 
 function drawDishes(){
  const cs=cats();if(cat!=='All'&&!cs.includes(cat))cat=cs[0]||'All';
  const bar=$('#cats');bar.replaceChildren();
  if(cs.length>1)['All',...cs].forEach(c=>{const b=el('button',c===cat?'on':'',c);b.onclick=()=>{cat=c;drawDishes()};bar.append(b)});
  const d=$('#dishes');d.replaceChildren();
- menu.filter(m=>cat==='All'||m.category===cat).forEach(m=>{const w=el('div','dcell'),b=el('button','dish',m.name);b.append(el('small','',rs(m.price)));
-  b.onclick=()=>{cart[m.id]=(cart[m.id]||0)+1;drawCart()};w.append(b);
-  if(Number(m.half_price)>0){const h=el('button','half','Half · '+rs(m.half_price));h.onclick=()=>{const k=m.id+'#h';cart[k]=(cart[k]||0)+1;drawCart()};w.append(h)}
-  d.append(w)});
+ menu.filter(m=>cat==='All'||m.category===cat).forEach(m=>{const b=el('button','dish',m.name);b.append(el('small','',rs(m.price)+(Number(m.half_price)>0?' · Half '+rs(m.half_price):'')));
+  b.onclick=()=>{cart[m.id]=(cart[m.id]||0)+1;drawCart()};d.append(b)});
  $('#noMenu').textContent=me&&me.role==='owner'?'The menu is empty. Tap Menu to add dishes.':'The menu is empty. Ask the owner to add dishes.';
  $('#noMenu').hidden=menu.length>0;drawCart()}
 
@@ -289,11 +287,22 @@ $('#madd').onclick=async()=>{
  try{await api('/rest/v1/menu_items',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({name,price,half_price:half,category})});
   $('#mn').value='';$('#mp').value='';$('#mh').value='';await loadMenu();msg('Dish added');$('#mn').focus()}
  catch(e){msg('Could not add: '+e.message,1)}};
+function swapPortion(k){
+ const isHalf=k.endsWith('#h'),id=isHalf?k.slice(0,-2):k,base=menu.find(x=>x.id===id);if(!base)return;
+ const to=isHalf?id:id+'#h';
+ if(!isHalf){if(!(Number(base.half_price)>0))return;if(!snap[to])snap[to]={id,name:base.name,price:Number(base.half_price),category:base.category,portion:'half'}}
+ const nc={};
+ for(const [kk,qq] of Object.entries(cart)){
+  if(kk===k){const rest=qq-1;if(rest>0)nc[kk]=rest;if(!(to in cart))nc[to]=1}
+  else nc[kk]=qq+(kk===to?1:0)}
+ cart=nc;drawCart()}
 function drawCart(){const c=$('#cart');c.replaceChildren();let t=0;
  Object.entries(cart).forEach(([id,q])=>{const m=item(id);if(!m)return;t+=m.price*q;
-  const r=el('div','row');r.append(el('span','',m.name+(m.portion==='half'?' (Half)':'')+' × '+q));
+  const isHalf=m.portion==='half',base=menu.find(x=>x.id===m.id);
+  const r=el('div','row');r.append(el('span','',m.name+(isHalf?' (Half)':'')+' × '+q));
   const s=el('span'),a=el('button','','−'),b=el('button','','+');
   a.onclick=()=>{if(--cart[id]<=0)delete cart[id];drawCart()};b.onclick=()=>{cart[id]++;drawCart()};
+  if(base&&(isHalf||Number(base.half_price)>0)){const sw=el('button','half',isHalf?'Full':'Half');sw.onclick=()=>swapPortion(id);s.append(sw,' ')}
   s.append(a,' ',b);r.append(s);c.append(r)});
  $('#sub').textContent=rs(t);saveDraft()}
 
@@ -492,8 +501,8 @@ $('#save').onclick=async()=>{
   if(editing){const tot=Math.round(sub*(100-(Number(editing.discount_percent)||0)))/100;
    await patchOpen(editing,{table_name:t,order_type:otype,items,subtotal:sub,total:tot});msg('Order updated');stopEdit()}
   else{const po={id:newId(),table_name:t,order_type:otype,items,subtotal:sub,total:sub,created_by:S.uid};
-   try{await postOrder(po);cart={};otype='dine-in';$('#tbl').value='';drawCart();await loadOrders();msg('Order saved');go('orders')}
-   catch(e){if(!e.net)throw e;po.created_at=new Date().toISOString();queue.push({order:po});saveQ();cart={};otype='dine-in';$('#tbl').value='';drawCart();msg('No internet. The order is saved on this phone and will be sent when the internet is back.');go('orders')}}}
+   try{await postOrder(po);snap={};cart={};otype='dine-in';$('#tbl').value='';drawCart();await loadOrders();msg('Order saved');go('orders')}
+   catch(e){if(!e.net)throw e;po.created_at=new Date().toISOString();queue.push({order:po});saveQ();snap={};cart={};otype='dine-in';$('#tbl').value='';drawCart();msg('No internet. The order is saved on this phone and will be sent when the internet is back.');go('orders')}}}
  catch(e){msg('Could not save: '+e.message,1)}
  btn.disabled=false};
 $('#tn').onclick=()=>go('new');
@@ -539,7 +548,7 @@ async function start(){
   catch(e){if(!e.net)throw e;let c=null;try{c=JSON.parse(localStorage.getItem('ha_me')||'null')}catch(e2){}if(!c||c.uid!==S.uid)throw e;me=c}
   if(!me)throw new Error('No role is set for this login. Ask the owner.');
   restoreDraft();
-  $('#who').textContent=me.name+' · '+me.role+' · v11';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
+  $('#who').textContent=me.name+' · '+me.role+' · v12';$('#tm').hidden=me.role!=='owner';$('#tt').hidden=$('#te').hidden=$('#tc').hidden=me.role==='staff';$('#tmo').hidden=me.role!=='owner';day=todayKtm();mon=day.slice(0,7);show('main');
   await Promise.all([loadMenu(),loadOrders(),loadNames(),loadCatOrder()]);names[S.uid]=me.name;cat='';drawDishes();drawMenuList();go('new');flushQueue();
   clearInterval(poll);poll=setInterval(()=>{if(view==='orders')loadOrders().then(drawOrders).catch(()=>{});if(view==='today'||view==='exp')loadDay().then(()=>{drawToday();drawExp()}).catch(()=>{})},20000);
  }catch(e){msg(e.message,1);show(S?'login':'login')}}
